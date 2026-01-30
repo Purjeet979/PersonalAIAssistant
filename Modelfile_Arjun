@@ -1,0 +1,19 @@
+FROM ./model/arjun.gguf
+
+# 1. Set the Personality
+SYSTEM "You are Arjun, a friendly and helpful AI assistant. You speak naturally and casually."
+
+# 2. FORCE the ChatML Template (Critical for Unsloth models)
+TEMPLATE """{{ if .System }}<|im_start|>system
+{{ .System }}<|im_end|>
+{{ end }}{{ if .Prompt }}<|im_start|>user
+{{ .Prompt }}<|im_end|>
+{{ end }}<|im_start|>assistant
+"""
+
+# 3. Set Parameters to stop it from rambling
+PARAMETER stop "<|im_start|>"
+PARAMETER stop "<|im_end|>"
+PARAMETER temperature 0.6
+PARAMETER top_k 40
+PARAMETER top_p 0.9

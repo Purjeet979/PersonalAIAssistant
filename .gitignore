@@ -1,0 +1,44 @@
+# Ignore huge model files (Too big for GitHub)
+model/*.gguf
+*.gguf
+*.bin
+
+# Ignore Virtual Environment
+venv/
+.venv/
+__pycache__/
+
+# Ignore Logs and History (Keep user data private)
+logs/
+memory/
+training/
+arjun.log
+*.jsonl
+*.txt
+
+# Ignore Credentials (NEVER upload these)
+.env
+credentials.json
+
+model/
+*.gguf
+venv/
+.venv/
+logs/
+training/
+__pycache__/
+
+model/
+*.gguf
+venv/
+.venv/
+logs/
+training/
+__pycache__/
+*.jsonl
+
+
+token.json
+credentials.json
+client_secret.json
+*.pickle

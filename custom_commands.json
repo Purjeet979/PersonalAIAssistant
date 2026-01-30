@@ -1,0 +1,49 @@
+{
+    "commands": [
+        {
+            "trigger": "youtube",
+            "type": "website",
+            "target": "https://www.youtube.com"
+        },
+        {
+            "trigger": "google",
+            "type": "website",
+            "target": "https://www.google.com"
+        },
+        {
+            "trigger": "wikipedia",
+            "type": "website",
+            "target": "https://www.wikipedia.org"
+        },
+        {
+            "trigger": "notepad",
+            "type": "app",
+            "target": "C:\\Windows\\system32\\notepad.exe",
+            "process_name": "notepad.exe"
+        },
+        {
+            "trigger": "calculator",
+            "type": "app",
+            "target": "C:\\Windows\\system32\\calc.exe",
+            "process_name": "CalculatorApp.exe"
+        },
+        {
+            "trigger": "task manager",
+            "type": "app",
+            "target": "C:\\Windows\\system32\\Taskmgr.exe",
+            "process_name": "Taskmgr.exe"
+        },
+        {
+            "trigger": "valorant",
+            "type": "app",
+            "target": "C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Riot Games\\VALORANT.lnk",
+            "process_name": "VALORANT-Win64-Shipping.exe"
+        },
+        {
+        "trigger": "whatsapp",
+        "type": "app",
+        "target": "whatsapp://",
+        "process_name": "WhatsApp.exe"
+        }
+    ]
+}
