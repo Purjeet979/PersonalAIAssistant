@@ -87,8 +87,9 @@ JarvisAI/
 
 ### 🛠️ Steps
 * Install dependencies:
-* pip install -r requirements.txt
-
+```text
+  pip install -r requirements.txt
+ ```
 ### Download the model
 * Get your fine-tuned arjun.gguf model (or use gemma:2b)
 * Place it inside the model/ folder
