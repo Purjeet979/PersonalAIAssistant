@@ -78,35 +78,16 @@ JarvisAI/
 ├── training/            # Stores "Gold" data from the Reward System
 └── logs/                # Error logs (Auto-cleaned)
 
-🚀 Installation & Setup
-Prerequisites:
+text'''
 
-Python 3.10+
+## 🚀 Installation & Setup ⚙️🧠
 
-Ollama installed and running.
+**📌 Prerequisites**
+* 🐍 Python 3.10+
+* 🤖 Ollama installed and running
 
-Install Dependencies:
-
-Bash
+**🛠️ Steps**
+* 📦 Install dependencies:
+```bash
 pip install -r requirements.txt
-Setup the Brain:
-
-Download your fine-tuned arjun.gguf model (or use gemma:2b).
-
-Place it in the model/ folder.
-
-Run: ollama create arjun-custom -f Modelfile_Arjun
-
-Run the Assistant:
-
-Bash
-python main.py
-🤝 Future Roadmap
-[ ] Integration of Flask for a Mobile Web Control Dashboard.
-
-[ ] Vision capabilities (See and describe images).
-
-[ ] Home Automation (IoT) control via local network.
-
-Developed with ❤️ by Purjeet.
 
