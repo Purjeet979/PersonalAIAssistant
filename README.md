@@ -78,30 +78,35 @@ JarvisAI/
 ├── training/            # Stores "Gold" data from the Reward System
 └── logs/                # Error logs (Auto-cleaned)
 
-🚀 Installation & Setup ⚙️🧠
+ ```
+## 🚀 Installation & Setup
 
-📌 Prerequisites
+### Prerequisites
+* **Python 3.10+**
+* **Ollama** installed and running
 
-🐍 Python 3.10+
-
-🤖 Ollama installed and running
-
-🛠️ Steps
+### Steps
+* Install dependencies:
 
 pip install -r requirements.txt
+Download your fine-tuned arjun.gguf model (or use gemma:2b)
+Place it inside the model/ folder.
+
+Create the custom Ollama model:
+
+ollama create arjun-custom -f Modelfile_Arjun
+Run the assistant:
+
+python main.py
+🤝 Future Roadmap
+ Flask-based mobile web control dashboard
+
+ Vision capabilities (image understanding)
+
+ Home automation (IoT) via local network
+
+Developed with ❤️ by Purjeet
 
 
-⬆️ **Notice this carefully**:
-- The project tree is inside **```text**
-- The code block is **closed**
-- `## Installation & Setup` starts **after**, with **no indentation**
-
----
-
-### Quick checklist (memorize this)
-- ❌ Heading inside ``` → breaks layout  
-- ❌ Indented heading → becomes code  
-- ✅ Close ``` before new section  
-- ✅ Headings start at column 1
-
-If you want, paste your **full README.md** here and I’ll **fix it line-by-line** so i
+This is **README-perfect**: compact, readable, and professional.  
+If you want it even tighter (no subheadings, pure bullets), I can compress it further.
