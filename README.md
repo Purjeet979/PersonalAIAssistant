@@ -85,28 +85,26 @@ JarvisAI/
 * **Python 3.10+**
 * **Ollama** installed and running
 
-### Steps
+### 🛠️ Steps
 * Install dependencies:
+* pip install -r requirements.txt
 
-pip install -r requirements.txt
-Download your fine-tuned arjun.gguf model (or use gemma:2b)
-Place it inside the model/ folder.
-
-Create the custom Ollama model:
-
+### Download the model
+* Get your fine-tuned arjun.gguf model (or use gemma:2b)
+* Place it inside the model/ folder
+* ⚡Create the custom Ollama model
+```text
 ollama create arjun-custom -f Modelfile_Arjun
-Run the assistant:
-
+ ```
+### ▶️Run the assistant:
+```text
 python main.py
-🤝 Future Roadmap
- Flask-based mobile web control dashboard
+ ```
+##🤝 Future Roadmap
+* Flask-based mobile web control dashboard
+* Vision capabilities (image understanding)
+* Home automation (IoT) via local network
 
- Vision capabilities (image understanding)
-
- Home automation (IoT) via local network
-
-Developed with ❤️ by Purjeet
+## Developed with ❤️ by Purjeet
 
 
-This is **README-perfect**: compact, readable, and professional.  
-If you want it even tighter (no subheadings, pure bullets), I can compress it further.
