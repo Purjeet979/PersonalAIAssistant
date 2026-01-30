@@ -100,7 +100,7 @@ ollama create arjun-custom -f Modelfile_Arjun
 ```text
 python main.py
  ```
-##🤝 Future Roadmap
+## 🤝 Future Roadmap
 * Flask-based mobile web control dashboard
 * Vision capabilities (image understanding)
 * Home automation (IoT) via local network
