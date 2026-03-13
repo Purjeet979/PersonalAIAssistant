@@ -1,13 +1,3 @@
-# jarvis/gmail_tools.py
-"""
-Gmail tools for Arjun/Jarvis.
-
-Features:
-- gmail_summary_text(...)        -> unread count + top senders + latest subjects
-- gmail_search_text(query, ...)  -> search gmail and summarise matches
-- gmail_important_text(...)      -> summary of starred/important emails
-- gmail_attachments_text(...)    -> summary of recent emails with attachments
-"""
 
 import os
 import datetime as dt
@@ -18,18 +8,12 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 
-# Read-only access to Gmail
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
 TOKEN_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "token.json")
 CREDS_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "credentials.json")
 
-
 def _get_gmail_service():
-    """
-    Returns an authenticated Gmail service object.
-    On first run, launches OAuth flow in browser.
-    """
     creds = None
     if os.path.exists(TOKEN_PATH):
         creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
@@ -50,11 +34,7 @@ def _get_gmail_service():
     service = build("gmail", "v1", credentials=creds)
     return service
 
-
 def _list_messages(service, query: str, max_results: int = 10) -> List[Dict[str, Any]]:
-    """
-    List message metadata for a Gmail search query.
-    """
     resp = service.users().messages().list(
         userId="me",
         q=query,
@@ -72,7 +52,6 @@ def _list_messages(service, query: str, max_results: int = 10) -> List[Dict[str,
         results.append(full)
     return results
 
-
 def _extract_header(headers: List[Dict[str, str]], name: str) -> str:
     for h in headers:
         if h.get("name", "").lower() == name.lower():
@@ -80,52 +59,34 @@ def _extract_header(headers: List[Dict[str, str]], name: str) -> str:
     return ""
 
 def _friendly_sender(raw: str) -> str:
-    """
-    Turn 'NSE Alerts <nse_alerts@nse.co.in>' into 'NSE Alerts'.
-    If no name is present, fall back to the email's local-part or domain.
-    """
     if not raw:
         return "someone"
 
     raw = raw.strip()
 
-    # If we have a "Name <email@domain>"
     if "<" in raw and ">" in raw:
         name_part = raw.split("<", 1)[0].strip().strip('"').strip("'")
         if name_part:
             return name_part
 
-    # Otherwise, try to use the part before @
     if "@" in raw:
         local = raw.split("@", 1)[0]
         return local.replace(".", " ").replace("_", " ").strip() or raw
 
     return raw
 
-
 def _friendly_subject(raw: str, max_len: int = 60) -> str:
-    """
-    Shorten long subjects for TTS. Remove extra spaces and cut after max_len.
-    """
     if not raw:
         return "no subject"
 
-    s = " ".join(raw.split())  # collapse whitespace
+    s = " ".join(raw.split())
 
     if len(s) > max_len:
         s = s[:max_len - 1].rstrip() + "…"
 
     return s
 
-# ------------------ PUBLIC FUNCTIONS (TEXT FOR TTS) ------------------ #
-
 def gmail_summary_text(days: int = 3) -> str:
-    """
-    Short, clean Gmail summary for TTS.
-    Example output:
-    'You have 5 unread emails. Mostly from Discord, ICICI Bank, and Google.
-     Recent subjects include: It's game time; You missed messages; Payment reminder.'
-    """
     try:
         service = _get_gmail_service()
     except Exception as e:
@@ -143,7 +104,6 @@ def gmail_summary_text(days: int = 3) -> str:
 
     total = len(msgs)
 
-    # Collect sender → count
     sender_counts = {}
     subjects = []
 
@@ -156,12 +116,10 @@ def gmail_summary_text(days: int = 3) -> str:
         raw_sub = _extract_header(headers, "Subject")
         subjects.append(_friendly_subject(raw_sub))
 
-    # Build clean output
     parts = []
 
     parts.append(f"You have {total} unread emails.")
 
-    # Top senders
     sorted_senders = sorted(sender_counts.items(), key=lambda x: x[1], reverse=True)
     top_senders = [name for name, _ in sorted_senders[:3]]
 
@@ -173,7 +131,6 @@ def gmail_summary_text(days: int = 3) -> str:
                 "They are mostly from " + ", ".join(top_senders[:-1]) + f", and {top_senders[-1]}."
             )
 
-    # Subjects (shortened + max 3)
     clean_subjects = subjects[:3]
 
     if clean_subjects:
@@ -181,18 +138,11 @@ def gmail_summary_text(days: int = 3) -> str:
 
     return " ".join(parts)
 
-
-
 def gmail_search_text(natural_query: str) -> str:
-    """
-    Use Gmail search to find messages matching a natural query.
-    We just pass it to Gmail's 'q' directly after some light cleanup.
-    """
     nq = (natural_query or "").strip()
     if not nq:
         return "You didn't specify what to search for in Gmail."
 
-    
     lowered = nq.lower()
     for prefix in [
         "search gmail for",
@@ -213,7 +163,6 @@ def gmail_search_text(natural_query: str) -> str:
     except Exception as e:
         return f"I couldn't connect to Gmail. {e}"
 
-    # Let Gmail interpret the query string
     try:
         msgs = _list_messages(service, nq, max_results=10)
     except Exception as e:
@@ -238,11 +187,7 @@ def gmail_search_text(natural_query: str) -> str:
 
     return " ".join(text_parts)
 
-
 def gmail_important_text() -> str:
-    """
-    Summary of starred / important emails.
-    """
     try:
         service = _get_gmail_service()
     except Exception as e:
@@ -270,18 +215,13 @@ def gmail_important_text() -> str:
 
     return " ".join(text_parts)
 
-
 def gmail_attachments_text(days: int = 7) -> str:
-    """
-    Summary of recent emails with attachments in the last N days,
-    formatted in a TTS-friendly way.
-    """
     try:
         service = _get_gmail_service()
     except Exception as e:
         return f"I couldn't connect to Gmail. {e}"
 
-    days = max(1, min(days, 60))  # clamp 1-60
+    days = max(1, min(days, 60))
     query = f"has:attachment newer_than:{days}d"
 
     try:

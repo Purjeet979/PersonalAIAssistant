@@ -1,4 +1,4 @@
-# gui/window.py
+
 import tkinter as tk
 from PIL import Image, ImageTk
 import threading
@@ -7,9 +7,8 @@ import queue
 from jarvis.assistant import JarvisAssistant
 from jarvis.paths import paths
 
-
 def run_app():
-    # ---- base window size ----
+
     WINDOW_WIDTH = 280
     WINDOW_BASE_HEIGHT = 350
 
@@ -18,7 +17,7 @@ def run_app():
     root.geometry(f"{WINDOW_WIDTH}x{WINDOW_BASE_HEIGHT}")
 
     current_wake_name = "Arjun"
-    base_status_height = None  # will be measured after first status
+    base_status_height = None
 
     BG_COLOR = "#2B2B2B"
     TEXT_COLOR = "#E0E0E0"
@@ -36,7 +35,6 @@ def run_app():
     def update_gui_status(text):
         gui_queue.put(text)
 
-    # ---------------- GIF ----------------
     try:
         gif = Image.open(paths.assistant_gif)
         frames = []
@@ -66,7 +64,6 @@ def run_app():
         )
         image_label.pack(pady=(10, 5))
 
-    # ---------------- STATUS LABEL (auto-resize window) ----------------
     status_label = tk.Label(
         root,
         text="Arjun is inactive.",
@@ -79,30 +76,25 @@ def run_app():
     status_label.pack(pady=(5, 10), padx=10)
 
     def set_status(msg: str):
-        """Update status text and adjust window height so full text is visible."""
         nonlocal base_status_height
 
         status_label.config(text=msg)
         root.update_idletasks()
 
-        # Measure required label height
         needed = status_label.winfo_reqheight()
 
-        # On first call, record baseline height (for short text)
         if base_status_height is None:
             base_status_height = needed
 
         extra = max(0, needed - base_status_height)
-        # Cap extra height so window doesn't go crazy tall
+
         extra = min(extra, 220)
 
         new_height = WINDOW_BASE_HEIGHT + extra
         root.geometry(f"{WINDOW_WIDTH}x{new_height}")
 
-    # initialize baseline
     set_status("Arjun is inactive.")
 
-    # ---------------- MODE LABEL ----------------
     mode_label = tk.Label(
         root,
         text="Mode: Friendly",
@@ -112,7 +104,6 @@ def run_app():
     )
     mode_label.pack(pady=(0, 10))
 
-    # ---------------- BUTTONS ----------------
     def on_button_enter(event, button, color):
         button.config(bg=color)
 
@@ -192,7 +183,6 @@ def run_app():
         "<Leave>", lambda e: on_button_leave(e, quit_button, QUIT_COLOR)
     )
 
-    # ---------------- DRAG WINDOW BY GIF ----------------
     def move_window(event):
         root.geometry(
             f"+{event.x_root - root.winfo_width() // 2}+{event.y_root - 20}"
@@ -200,7 +190,6 @@ def run_app():
 
     image_label.bind("<B1-Motion>", move_window)
 
-    # ---------------- QUEUE HANDLER ----------------
     def process_gui_queue():
         nonlocal current_wake_name
 
@@ -226,11 +215,10 @@ def run_app():
                 elif "JARVIS" in msg:
                     mode_label.config(text="Mode: Jarvis-style")
 
-            # update wake word name
             elif msg.startswith("WAKEWORD:"):
                 new_name = msg.split(":", 1)[1].strip() or "Arjun"
                 current_wake_name = new_name
-                # if currently sleeping, refresh text
+
                 if "Sleeping..." in status_label.cget("text"):
                     text = f"Sleeping... (Say 'Hey {current_wake_name}' to wake)"
                     set_status(text)

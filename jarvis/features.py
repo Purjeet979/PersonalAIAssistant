@@ -1,4 +1,4 @@
-# jarvis/features.py
+
 import os
 import re
 import random
@@ -19,11 +19,9 @@ def check_command(query, action_words, subject_words):
     query = query.lower()
     return any(a in query for a in action_words) and any(s in query for s in subject_words)
 
-# --- Notes & Files ---
-
 def take_note(audio_mgr):
     say = audio_mgr.say
-    say("What should I write down, sir?")
+    say("What should I write down?")
     note = audio_mgr.listen()
     if "none" in note:
         say("I didn't catch that. Note cancelled.")
@@ -101,13 +99,11 @@ def find_file(audio_mgr, update_gui_status):
     else:
         say("Okay, I will not open it.")
 
-# --- Timers & Alarms ---
-
 def _timer_end(duration_str, audio_mgr):
-    audio_mgr.say(f"Sir, your timer for {duration_str} is up.")
+    audio_mgr.say(f"Your timer for {duration_str} is up.")
 
 def _alarm_end(time_str, audio_mgr):
-    audio_mgr.say(f"Sir, this is your alarm for {time_str}.")
+    audio_mgr.say(f"This is your alarm for {time_str}.")
 
 def set_alarm(query, audio_mgr):
     say = audio_mgr.say
@@ -157,8 +153,6 @@ def set_timer(query, audio_mgr):
     threading.Timer(seconds, _timer_end, args=[duration_str, audio_mgr]).start()
     say(f"Okay, timer set for {duration_str}.")
 
-# --- Weather & News ---
-
 def simple_weather(query, audio_mgr, state, update_gui_status):
     say = audio_mgr.say
     if "weather in" not in query:
@@ -187,15 +181,11 @@ def get_latest_news():
     try:
         newsapi = NewsApiClient(api_key=config.NEWS_API_KEY)
 
-        # Better: use country instead of q filter
         headlines = newsapi.get_top_headlines(
-            country="in",      # India
+            country="in",
             language="en",
             page_size=5
         )
-
-        # Debug (optional – helps you see the raw response)
-        # print(headlines)
 
         if headlines.get("status") != "ok" or headlines.get("totalResults", 0) == 0:
             return None, "I couldn't find any top headlines right now."
@@ -206,7 +196,6 @@ def get_latest_news():
     except Exception as e:
         print(f"NewsAPI error: {e}")
         return None, "I had trouble connecting to the news service. Please check the API key."
-
 
 def speak_latest_news(audio_mgr, state, update_gui_status):
     say = audio_mgr.say
@@ -220,8 +209,6 @@ def speak_latest_news(audio_mgr, state, update_gui_status):
         f"'{joined}'. Please read the top 3 headlines to the user in a natural and engaging way."
     )
     ai_generate(prompt, state, say, update_gui_status, speak_result=True)
-
-# --- System Status & Controls ---
 
 def speak_system_status(audio_mgr):
     say = audio_mgr.say

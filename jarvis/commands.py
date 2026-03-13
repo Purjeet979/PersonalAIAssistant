@@ -1,4 +1,4 @@
-# jarvis/commands.py
+
 import json
 import os
 import requests
@@ -31,7 +31,7 @@ def save_commands(commands):
 
 def learn_new_command(trigger, audio_mgr, update_gui_status, commands):
     say = audio_mgr.say
-    
+
     if not trigger:
         say("Okay, I'm ready to learn. What is the trigger phrase?")
         update_gui_status("Listening for trigger...")
@@ -103,7 +103,7 @@ def run_custom_commands(query, commands, audio_mgr, update_gui_status, state):
     say = audio_mgr.say
     for cmd in commands:
         if cmd["trigger"] in query:
-            # OPEN
+
             if any(a in query for a in OPEN_ACTIONS):
                 say(f"Opening {cmd['trigger']}...")
                 if cmd["type"] == "website":
@@ -133,12 +133,10 @@ def run_custom_commands(query, commands, audio_mgr, update_gui_status, state):
                             say(f"Sorry, I couldn't retrieve the weather for {city}.")
                     except Exception as e:
                         say("Weather service is unreachable.")
-                
-                # --- FIX: Added the missing arguments here ---
+
                 log_episode(query, f"Opened {cmd['trigger']}", "custom_command_open", True)
                 return True
 
-            # CLOSE
             if cmd["type"] == "app" and any(a in query for a in CLOSE_ACTIONS):
                 try:
                     if "process_name" in cmd and cmd["process_name"]:
@@ -150,8 +148,7 @@ def run_custom_commands(query, commands, audio_mgr, update_gui_status, state):
                 except Exception as e:
                     print(f"Error closing app: {e}")
                     say(f"Sorry, I had trouble trying to close {cmd['trigger']}.")
-                
-                # --- FIX: Added the missing arguments here ---
+
                 log_episode(query, f"Closed {cmd['trigger']}", "custom_command_close", True)
                 return True
     return False

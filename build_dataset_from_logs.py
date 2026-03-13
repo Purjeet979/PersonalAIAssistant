@@ -1,15 +1,3 @@
-# build_dataset_from_logs.py
-"""
-Build a fine-tuning dataset from Arjun/Jarvis episode logs.
-
-It expects a JSONL log file where each line is a JSON object.
-It tries to detect:
-- user text  from keys like: query, user, user_input, prompt
-- reply text from keys like: reply, response, assistant, assistant_reply, final_reply
-
-Output: dataset.jsonl in chat format:
-{"messages":[{"role":"user","content":"..."},{"role":"assistant","content":"..."}]}
-"""
 
 import json
 import os
@@ -33,13 +21,12 @@ CANDIDATE_ASSIST_KEYS = [
 ]
 
 try:
-    # If you have jarvis.paths, use it for the default path
+
     from jarvis.paths import paths
     DEFAULT_LOG_PATH = paths.episode_log
 except Exception:
-    # Fallback: adjust this to your real log path if needed
-    DEFAULT_LOG_PATH = "logs/episodes.jsonl"
 
+    DEFAULT_LOG_PATH = "logs/episodes.jsonl"
 
 CANDIDATE_USER_KEYS = [
     "query",
@@ -58,9 +45,7 @@ CANDIDATE_ASSIST_KEYS = [
     "answer",
 ]
 
-
 def pick_first_str(d: dict, keys) -> str | None:
-    """Return first non-empty string value for any of the given keys, or None."""
     for k in keys:
         v = d.get(k)
         if isinstance(v, str):
@@ -68,7 +53,6 @@ def pick_first_str(d: dict, keys) -> str | None:
             if v:
                 return v
     return None
-
 
 def build_dataset(
     log_path: str,
@@ -136,7 +120,6 @@ def build_dataset(
     print(f"Skipped (no JSON):  {skipped_no_json}")
     print(f"Skipped (missing user/assistant text): {skipped_missing_fields}")
 
-
 def main():
     parser = argparse.ArgumentParser(description="Build fine-tuning dataset from logs.")
     parser.add_argument(
@@ -178,7 +161,6 @@ def main():
         min_user_len=args.min_user_len,
         min_assist_len=args.min_assist_len,
     )
-
 
 if __name__ == "__main__":
     main()

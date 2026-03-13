@@ -1,4 +1,4 @@
-# jarvis/assistant.py
+
 import threading
 import datetime
 import pythoncom
@@ -25,6 +25,23 @@ from .gmail_tools import (
     gmail_attachments_text,
 )
 
+SLEEP_TRIGGERS = ("go to sleep", "stop arjun", "stop listening")
+NOTE_ADD_TRIGGERS = ("take a note", "write this down", "make a note")
+NOTE_READ_TRIGGERS = ("read my notes", "show my notes", "what are my notes")
+FILE_SEARCH_TRIGGERS = ("find file", "search for file", "search file")
+GMAIL_SUMMARY_TRIGGERS = ("gmail summary", "summary of my gmail", "gmail ka summary", "inbox summary")
+GMAIL_SEARCH_TRIGGERS = ("search gmail for", "gmail search for", "gmail me search", "gmail me dekh")
+GMAIL_IMPORTANT_TRIGGERS = ("important emails", "starred emails", "gmail important", "gmail starred")
+GMAIL_ATTACH_TRIGGERS = ("email attachments", "attachments in gmail", "koi attachment aya", "any new attachments")
+SYSTEM_STATUS_TRIGGERS = ("system status", "system stats", "cpu usage", "ram usage")
+VOL_UP_TRIGGERS = ("increase volume", "increase the volume", "volume up")
+VOL_DOWN_TRIGGERS = ("decrease volume", "decrease the volume", "volume down", "lower volume")
+BRIGHT_UP_TRIGGERS = ("increase brightness", "brightness up")
+BRIGHT_DOWN_TRIGGERS = ("decrease brightness", "brightness down", "lower brightness")
+JOKE_TRIGGERS = ("tell me a joke", "say a joke", "make me laugh")
+SHUTDOWN_TRIGGERS = ("shutdown", "turn off", "power off")
+RESTART_TRIGGERS = ("restart", "reboot")
+SELF_IMPROVE_TRIGGERS = ("optimize yourself", "improve yourself", "update yourself", "upgrade yourself")
 
 class JarvisAssistant:
     def __init__(self, gui_queue, update_gui_status):
@@ -37,6 +54,180 @@ class JarvisAssistant:
         self.commands = load_commands()
         self.force_sleep_toggle = False
         self.display_name = "Arjun"
+
+    def _contains_any(self, text, phrases):
+        return any(p in text for p in phrases)
+
+    def _say_by_persona(self, friendly_text: str, jarvis_text: str | None = None):
+        self.audio.say(jarvis_text if self.state.current_persona == "jarvis" and jarvis_text else friendly_text)
+
+    def _try_handle_query(self, query: str, lower_q: str):
+        if self._contains_any(lower_q, SLEEP_TRIGGERS):
+            self._say_by_persona("Going to sleep.", "Entering sleep mode.")
+            self.audio.set_sleep(True)
+            self.gui_queue.put("STATE:SLEEPING")
+            return "handled"
+
+        if run_custom_commands(query, self.commands, self.audio, self.update_gui_status, self.state):
+            return "handled"
+
+        if "learn a new command" in lower_q or "new command" in lower_q:
+            learn_new_command(trigger=None, audio_mgr=self.audio, update_gui_status=self.update_gui_status, commands=self.commands)
+            save_commands(self.commands)
+            return "handled"
+
+        if "read my clipboard" in lower_q or "what's on my clipboard" in lower_q:
+            import pyperclip
+            try:
+                text = pyperclip.paste()
+                if text:
+                    self.audio.say("Your clipboard contains the following text:")
+                    self.audio.say(text)
+                else:
+                    self.audio.say("Your clipboard is empty.")
+            except Exception as e:
+                print(e)
+                self.audio.say("I had trouble reading your clipboard.")
+            return "handled"
+
+        if "arjun remember" in lower_q or "remember this" in lower_q:
+            ok, msg = remember_fact(query)
+            self.audio.say(msg)
+            if ok:
+                load_memory(self.state)
+            return "handled"
+
+        if self._contains_any(lower_q, NOTE_ADD_TRIGGERS):
+            take_note(self.audio)
+            return "handled"
+        if self._contains_any(lower_q, NOTE_READ_TRIGGERS):
+            read_notes(self.audio)
+            return "handled"
+
+        if self._contains_any(lower_q, FILE_SEARCH_TRIGGERS):
+            find_file(self.audio, self.update_gui_status)
+            return "handled"
+
+        if self._contains_any(lower_q, GMAIL_SUMMARY_TRIGGERS):
+            self.update_gui_status("Fetching Gmail summary...")
+            self.audio.say(gmail_summary_text())
+            return "handled"
+        if self._contains_any(lower_q, GMAIL_SEARCH_TRIGGERS):
+            self.update_gui_status("Searching your Gmail...")
+            self.audio.say(gmail_search_text(query))
+            return "handled"
+        if self._contains_any(lower_q, GMAIL_IMPORTANT_TRIGGERS):
+            self.update_gui_status("Checking important emails...")
+            self.audio.say(gmail_important_text())
+            return "handled"
+        if self._contains_any(lower_q, GMAIL_ATTACH_TRIGGERS):
+            self.update_gui_status("Checking recent email attachments...")
+            self.audio.say(gmail_attachments_text(days=7))
+            return "handled"
+
+        if handle_whatsapp_command(query, self.audio, self.update_gui_status):
+            return "handled"
+
+        if check_command(lower_q, ["play", "open", "start"], ["music", "song", "track"]):
+            self._say_by_persona("Starting your music.", "Starting music playback.")
+            music_path = r"C:\Users\PURJEET\Downloads\song.mp3"
+            try:
+                import os
+                os.system(f"start {music_path}")
+            except Exception as e:
+                print(e)
+                self.audio.say("I couldn't play that music file.")
+            return "handled"
+
+        if ("what is" in lower_q and "my name" in lower_q) or "who am i" in lower_q:
+            if self.state.user_name:
+                self._say_by_persona(f"Your name is {self.state.user_name}.", f"Your name: {self.state.user_name}.")
+            else:
+                self.audio.say("I don't know your name yet. You can tell me by saying 'Arjun remember my name is...'")
+            return "handled"
+
+        if check_command(lower_q, ["what is", "tell me"], ["the time"]):
+            now = datetime.datetime.now().strftime('%H:%M:%S')
+            self._say_by_persona(f"The time is {now}", f"Time: {now}.")
+            return "handled"
+
+        if simple_weather(lower_q, self.audio, self.state, self.update_gui_status):
+            return "handled"
+
+        if "wake me up at" in lower_q or "set an alarm for" in lower_q:
+            set_alarm(query, self.audio)
+            return "handled"
+        if "set a timer for" in lower_q:
+            set_timer(query, self.audio)
+            return "handled"
+
+        if "latest news" in lower_q or "news headlines" in lower_q:
+            speak_latest_news(self.audio, self.state, self.update_gui_status)
+            return "handled"
+
+        if self._contains_any(lower_q, SYSTEM_STATUS_TRIGGERS):
+            speak_system_status(self.audio)
+            return "handled"
+        if self._contains_any(lower_q, VOL_UP_TRIGGERS):
+            volume_up(self.audio)
+            return "handled"
+        if self._contains_any(lower_q, VOL_DOWN_TRIGGERS):
+            volume_down(self.audio)
+            return "handled"
+
+        if "pause" in lower_q or "play" in lower_q:
+            media_playpause(self.audio)
+            return "handled"
+        if "next song" in lower_q or "next track" in lower_q:
+            media_next(self.audio)
+            return "handled"
+        if "previous song" in lower_q or "previous track" in lower_q:
+            media_prev(self.audio)
+            return "handled"
+
+        if self._contains_any(lower_q, BRIGHT_UP_TRIGGERS):
+            brightness_up(self.audio)
+            return "handled"
+        if self._contains_any(lower_q, BRIGHT_DOWN_TRIGGERS):
+            brightness_down(self.audio)
+            return "handled"
+
+        if self._contains_any(lower_q, JOKE_TRIGGERS):
+            tell_joke(self.audio)
+            return "handled"
+
+        if self._contains_any(lower_q, SHUTDOWN_TRIGGERS):
+            shutdown_pc(self.audio)
+            return "handled"
+        if self._contains_any(lower_q, RESTART_TRIGGERS):
+            restart_pc(self.audio)
+            return "handled"
+
+        if "arjun quit" in lower_q or "exit" in lower_q:
+            self._say_by_persona("Goodbye. Shutting down.", "Shutting down.")
+            self.gui_queue.put("QUIT")
+            return "quit"
+
+        if "jarvis" in lower_q and (any(w in lower_q for w in ["mode", "style", "switch", "change", "become", "mod"]) or lower_q.strip() == "jarvis"):
+            self.set_persona("jarvis")
+            return "handled"
+
+        if "friendly" in lower_q or "friend mode" in lower_q or ("normal" in lower_q and "mode" in lower_q) or "back to normal" in lower_q:
+            self.set_persona("friendly")
+            return "handled"
+
+        if "reset chat" in lower_q:
+            self.audio.say("Chat history has been reset.")
+            load_memory(self.state)
+            return "handled"
+
+        if self._contains_any(lower_q, SELF_IMPROVE_TRIGGERS):
+            self.audio.say("Okay, I will review recent interactions and try to improve.")
+            self_evaluate_and_improve(self.state, self.audio.say)
+            return "handled"
+
+        ai_chat(query, self.state, self.audio.say, self.update_gui_status)
+        return "handled"
 
     def set_persona(self, mode: str):
         mode = (mode or "").lower().strip()
@@ -75,7 +266,7 @@ class JarvisAssistant:
             self.gui_queue.put("STATE:SLEEPING")
         else:
             self.gui_queue.put("STATE:AWAKE")
-            self.audio.say("I am online and ready, sir.")
+            self._say_by_persona("I am online and ready.", "Online.")
 
     def run(self):
         self.update_gui_status("Arjun A.I is ready.")
@@ -85,13 +276,12 @@ class JarvisAssistant:
             while True:
                 self._handle_sleep_toggle()
 
-                # Sleep mode: only wake word
                 if self.audio.is_asleep:
                     query = self.audio.listen()
                     if "hey arjun" in query or "wake up" in query:
                         self.audio.set_sleep(False)
                         self.gui_queue.put("STATE:AWAKE")
-                        self.audio.say("I am online and ready, sir.")
+                        self._say_by_persona("I am online and ready.", "Online.")
                     continue
 
                 query = self.audio.listen()
@@ -99,266 +289,9 @@ class JarvisAssistant:
                     continue
 
                 lower_q = query.lower()
-
-                # Put to sleep
-                if any(t in lower_q for t in ["go to sleep", "stop arjun", "stop listening"]):
-                    self.audio.say("Going to sleep, sir.")
-                    self.audio.set_sleep(True)
-                    self.gui_queue.put("STATE:SLEEPING")
-                    continue
-
-                # Custom commands
-                if run_custom_commands(query, self.commands, self.audio, self.update_gui_status, self.state):
-                    continue
-
-                # Learn new command (manual)
-                if "learn a new command" in lower_q or "new command" in lower_q:
-                    learn_new_command(
-                        trigger=None,
-                        audio_mgr=self.audio,
-                        update_gui_status=self.update_gui_status,
-                        commands=self.commands,
-                    )
-                    save_commands(self.commands)
-                    continue
-
-                # Clipboard read
-                if "read my clipboard" in lower_q or "what's on my clipboard" in lower_q:
-                    import pyperclip
-                    try:
-                        text = pyperclip.paste()
-                        if text:
-                            self.audio.say("Your clipboard contains the following text:")
-                            self.audio.say(text)
-                        else:
-                            self.audio.say("Your clipboard is empty.")
-                    except Exception as e:
-                        print(e)
-                        self.audio.say("I had trouble reading your clipboard.")
-                    continue
-
-                # Memory
-                if "arjun remember" in lower_q or "remember this" in lower_q:
-                    ok, msg = remember_fact(query)
-                    self.audio.say(msg)
-                    if ok:
-                        load_memory(self.state)
-                    continue
-
-                # Notes
-                if any(t in lower_q for t in ["take a note", "write this down", "make a note"]):
-                    take_note(self.audio)
-                    continue
-                if any(t in lower_q for t in ["read my notes", "show my notes", "what are my notes"]):
-                    read_notes(self.audio)
-                    continue
-
-                # File search
-                if any(t in lower_q for t in ["find file", "search for file", "search file"]):
-                    find_file(self.audio, self.update_gui_status)
-                    continue
-
-                # ----------------- GMAIL FEATURES ----------------- #
-
-                # Gmail summary
-                if any(
-                    phrase in lower_q
-                    for phrase in [
-                        "gmail summary",
-                        "summary of my gmail",
-                        "gmail ka summary",
-                        "inbox summary",
-                    ]
-                ):
-                    self.update_gui_status("Fetching Gmail summary...")
-                    text = gmail_summary_text()
-                    self.audio.say(text)
-                    continue
-
-                # Gmail search
-                if any(
-                    phrase in lower_q
-                    for phrase in [
-                        "search gmail for",
-                        "gmail search for",
-                        "gmail me search",
-                        "gmail me dekh",
-                    ]
-                ):
-                    self.update_gui_status("Searching your Gmail...")
-                    text = gmail_search_text(query)
-                    self.audio.say(text)
-                    continue
-
-                # Important / starred emails
-                if any(
-                    phrase in lower_q
-                    for phrase in [
-                        "important emails",
-                        "starred emails",
-                        "gmail important",
-                        "gmail starred",
-                    ]
-                ):
-                    self.update_gui_status("Checking important emails...")
-                    text = gmail_important_text()
-                    self.audio.say(text)
-                    continue
-
-                # Attachment alerts
-                if any(
-                    phrase in lower_q
-                    for phrase in [
-                        "email attachments",
-                        "attachments in gmail",
-                        "koi attachment aya",
-                        "any new attachments",
-                    ]
-                ):
-                    self.update_gui_status("Checking recent email attachments...")
-                    text = gmail_attachments_text(days=7)
-                    self.audio.say(text)
-                    continue
-
-                # WhatsApp messaging (semi-automatic)
-                if handle_whatsapp_command(query, self.audio, self.update_gui_status):
-                    continue
-
-                # Music (your single track)
-                if check_command(lower_q, ["play", "open", "start"], ["music", "song", "track"]):
-                    self.audio.say("Starting your music, sir.")
-                    music_path = r"C:\Users\PURJEET\Downloads\song.mp3"
-                    try:
-                        import os
-                        os.system(f"start {music_path}")
-                    except Exception as e:
-                        print(e)
-                        self.audio.say("I couldn't play that music file.")
-                    continue
-
-                # Name
-                if ("what is" in lower_q and "my name" in lower_q) or "who am i" in lower_q:
-                    if self.state.user_name:
-                        self.audio.say(f"Your name is {self.state.user_name}, sir.")
-                    else:
-                        self.audio.say(
-                            "I don't know your name yet. You can tell me by saying 'Arjun remember my name is...'"
-                        )
-                    continue
-
-                # Time
-                if check_command(lower_q, ["what is", "tell me"], ["the time"]):
-                    now = datetime.datetime.now().strftime("%H:%M:%S")
-                    self.audio.say(f"Sir, the time is {now}")
-                    continue
-
-                # Weather
-                if simple_weather(lower_q, self.audio, self.state, self.update_gui_status):
-                    continue
-
-                # Alarm / Timer
-                if "wake me up at" in lower_q or "set an alarm for" in lower_q:
-                    set_alarm(query, self.audio)
-                    continue
-                if "set a timer for" in lower_q:
-                    set_timer(query, self.audio)
-                    continue
-
-                # News
-                if "latest news" in lower_q or "news headlines" in lower_q:
-                    speak_latest_news(self.audio, self.state, self.update_gui_status)
-                    continue
-
-                # System status
-                if any(t in lower_q for t in ["system status", "system stats", "cpu usage", "ram usage"]):
-                    speak_system_status(self.audio)
-                    continue
-
-                # Volume
-                if any(t in lower_q for t in ["increase volume", "increase the volume", "volume up"]):
-                    volume_up(self.audio)
-                    continue
-                if any(t in lower_q for t in ["decrease volume", "decrease the volume", "volume down", "lower volume"]):
-                    volume_down(self.audio)
-                    continue
-
-                # Media controls
-                if "pause" in lower_q or "play" in lower_q:
-                    media_playpause(self.audio)
-                    continue
-                if "next song" in lower_q or "next track" in lower_q:
-                    media_next(self.audio)
-                    continue
-                if "previous song" in lower_q or "previous track" in lower_q:
-                    media_prev(self.audio)
-                    continue
-
-                # Brightness
-                if any(t in lower_q for t in ["increase brightness", "brightness up"]):
-                    brightness_up(self.audio)
-                    continue
-                if any(t in lower_q for t in ["decrease brightness", "brightness down", "lower brightness"]):
-                    brightness_down(self.audio)
-                    continue
-
-                # Jokes
-                if any(t in lower_q for t in ["tell me a joke", "say a joke", "make me laugh"]):
-                    tell_joke(self.audio)
-                    continue
-
-                # Power
-                if any(t in lower_q for t in ["shutdown", "turn off", "power off"]):
-                    shutdown_pc(self.audio)
-                    continue
-                if any(t in lower_q for t in ["restart", "reboot"]):
-                    restart_pc(self.audio)
-                    continue
-
-                # Exit
-                if "arjun quit" in lower_q or "exit" in lower_q:
-                    self.audio.say("Goodbye sir. Shutting down.")
-                    self.gui_queue.put("QUIT")
+                route = self._try_handle_query(query, lower_q)
+                if route == "quit":
                     break
-
-                # -------- Persona switches (robust) --------
-                # Switch TO JARVIS
-                if (
-                    "jarvis" in lower_q
-                    and (
-                        any(w in lower_q for w in ["mode", "style", "switch", "change", "become", "mod"])
-                        or lower_q.strip() == "jarvis"
-                    )
-                ):
-                    self.set_persona("jarvis")
-                    continue
-
-                # Switch TO FRIENDLY
-                if (
-                    "friendly" in lower_q
-                    or "friend mode" in lower_q
-                    or ("normal" in lower_q and "mode" in lower_q)
-                    or "back to normal" in lower_q
-                ):
-                    self.set_persona("friendly")
-                    continue
-
-                # Reset chat
-                if "reset chat" in lower_q:
-                    self.audio.say("Chat history has been reset.")
-                    load_memory(self.state)
-                    continue
-
-                # Self optimise
-                if any(
-                    t in lower_q
-                    for t in ["optimize yourself", "improve yourself", "update yourself", "upgrade yourself"]
-                ):
-                    self.audio.say("Okay, I will review recent interactions and try to improve.")
-                    self_evaluate_and_improve(self.state, self.audio.say)
-                    continue
-
-                # Fallback: chat LLM
-                ai_chat(query, self.state, self.audio.say, self.update_gui_status)
 
         finally:
             self.audio.cleanup()

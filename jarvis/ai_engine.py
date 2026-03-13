@@ -1,85 +1,171 @@
-# jarvis/ai_engine.py
+
 import os
 import json
 import time
+import warnings
 import wikipedia
 import re
 import ollama
+from collections import deque
 from .paths import paths
 from .memory import MemoryState
 from jarvis.logger import log_episode
 
-# --- SETTINGS ---
-MAX_HISTORY_LIMIT = 20  # Keep only last 20 messages to prevent confusion
+try:
+    from bs4 import GuessedAtParserWarning
+    warnings.filterwarnings("ignore", category=GuessedAtParserWarning)
+except Exception:
+    pass
+
+MAX_HISTORY_LIMIT = 20
+KNOWLEDGE_TRIGGERS = ("who is", "what is", "tell me about", "why is", "how does")
+STIFF_PREFIXES = ("Dear sir", "Greetings", "Hello sir")
+PERSONA_MODELS = {"friendly": "arjun-custom", "jarvis": "gemma:2b"}
+FRIENDLY_CHAT_OPTIONS = {"temperature": 0.55, "top_p": 0.92, "num_predict": 260}
+JARVIS_CHAT_OPTIONS = {"temperature": 0.2, "top_p": 0.85, "num_predict": 180}
+EMOTIONAL_CUES = ("sad", "stress", "stressed", "low", "anxious", "anxiety", "upset", "tired", "lonely", "hurt", "depressed", "bad day")
+ONE_WORD_ALLOW = ("one word", "single word", "just one word", "yes or no", "only yes or no")
+SHORT_REPLY_MAX_WORDS = 4
+RECIPE_CUES = ("recipe", "how to make", "make", "cook", "cooking", "sandwich", "anda", "egg")
+GENERIC_REPLY_CUES = ("i will", "with you", "sure", "okay", "ok", "done", "let's do it", "ill do it", "i'll do it")
+JARVIS_FLUFF_PREFIXES = (
+    "absolutely",
+    "certainly",
+    "of course",
+    "great question",
+    "that's a great question",
+    "i'd be happy to",
+    "sure",
+)
+JARVIS_FLUFF_PHRASES = (
+    "that is a great question",
+    "i hope this helps",
+    "let me know if you need anything else",
+    "if you want, i can",
+    "feel free to ask",
+)
+
+def _trim_history(history):
+    if len(history) <= MAX_HISTORY_LIMIT:
+        return history
+    return [history[0]] + history[-(MAX_HISTORY_LIMIT - 1):]
+
+def _sanitize_query(query: str):
+    q = (query or "").strip()
+    ql = q.lower()
+    for w in ("hey arjun", "arjun", "hey jarvis", "jarvis"):
+        if ql.startswith(w):
+            q = q[len(w):].strip(" ,.-")
+            ql = q.lower()
+            break
+    return (q or query).strip(), (q or query).strip().lower()
+
+def _knowledge_context(query: str, query_lower: str, say, update_gui_status) -> str:
+    if not any(t in query_lower for t in KNOWLEDGE_TRIGGERS) or "my" in query_lower:
+        return ""
+    topic = query_lower.replace("who is", "").replace("what is", "").replace("tell me about", "").replace("hey arjun", "").strip()
+    if not topic or topic == "arjun":
+        return ""
+    try:
+        update_gui_status(f"Searching Wikipedia for {topic}...")
+        summary = wikipedia.summary(topic, sentences=2)
+        say(f"I found this on Wikipedia about {topic}.")
+        return f"\n\n[Context: {summary}]"
+    except Exception:
+        return ""
 
 def apply_persona_style(reply: str, state: MemoryState) -> str:
     reply = reply.strip()
+    if not reply:
+        return reply
     if state.current_persona == "jarvis":
+        low = reply.lower().strip()
+        for p in JARVIS_FLUFF_PREFIXES:
+            if low.startswith(p):
+                reply = re.sub(r"^[^,.!?]*[,.!?]\s*", "", reply).strip() or reply
+                low = reply.lower().strip()
+                break
+        for p in JARVIS_FLUFF_PHRASES:
+            reply = re.sub(rf"\b{re.escape(p)}\b[,.!?\s]*", "", reply, flags=re.IGNORECASE)
+            low = reply.lower().strip()
+        reply = re.sub(r"\s+", " ", reply).strip()
+        if not reply:
+            reply = "Done."
+        if reply[-1] not in ".!?":
+            reply += "."
         if not reply.lower().startswith("sir"):
             reply = "Sir, " + reply[0].lower() + reply[1:]
         return reply
 
-    stiff_prefixes = ["Dear sir", "Greetings", "Hello sir"]
-    for p in stiff_prefixes:
+    for p in STIFF_PREFIXES:
         if reply.lower().startswith(p.lower()):
             reply = reply[len(p):].lstrip(" ,.")
             break
+    reply = re.sub(r"^(sir|madam|dear)\b[,:\s-]*", "", reply, flags=re.IGNORECASE).strip()
     return reply
+
+def _enrich_friendly_reply(query_lower: str, reply: str) -> str:
+    words = len(reply.split())
+    is_recipe_query = any(c in query_lower for c in RECIPE_CUES)
+    generic_reply = reply.lower().strip()
+    looks_generic = any(g in generic_reply for g in GENERIC_REPLY_CUES)
+
+    if is_recipe_query and (words < 30 or looks_generic):
+        return (
+            "Perfect, egg sandwich banate hain. Quick recipe: 1) 2 ande bowl me todkar namak, kali mirch, thoda chopped pyaz mirchi mix karo. "
+            "2) Pan me thoda butter daalke mixture ko scramble ya omelette style paka lo. "
+            "3) 2 bread slices ko butter ke sath light toast karo. "
+            "4) Bread par mayo ya chutney lagao, egg filling rakho, chahe to cheese/tomato add karo, phir close karke 1 minute press-toast karo. "
+            "5) Half cut karke garam serve karo. Chahe to main spicy ya healthy version bhi bata du."
+        )
+
+    if words > 10:
+        return reply
+    if any(k in query_lower for k in ONE_WORD_ALLOW):
+        return reply
+    if not any(c in query_lower for c in EMOTIONAL_CUES):
+        if words > SHORT_REPLY_MAX_WORDS:
+            return reply
+        tail = "Tu chahe to main thoda detail me samjha du ya next step bata du?"
+        if any(x in query_lower for x in ("what", "why", "how", "kaise", "kya", "kyu", "explain")):
+            tail = "Agar bole to main isko simple aur clear way me step-by-step explain kar deta hu."
+        elif any(x in query_lower for x in ("plan", "career", "job", "study", "exam", "project", "help")):
+            tail = "Chal isko easy banate hain, main abhi 2-3 practical steps de deta hu."
+        if reply and reply[-1] not in ".!?":
+            reply += "."
+        return f"{reply} {tail}"
+    if reply and reply[-1] not in ".!?":
+        reply += "."
+    return f"{reply} Koi na, main tere sath hu, I will support you. Tu chahe to bata kya hua, ya main abhi ek chhota next step suggest kar du?"
 
 def chat(query: str, state: MemoryState, say, update_gui_status):
     update_gui_status("Thinking...")
 
-    # 1. HANDLE WIKIPEDIA SEARCHES
-    knowledge_triggers = ["who is", "what is", "tell me about", "why is", "how does"]
-    is_knowledge = any(t in query.lower() for t in knowledge_triggers) and "my" not in query.lower()
-
-    knowledge_context = ""
-    if is_knowledge:
-        topic = (
-            query.lower()
-            .replace("who is", "")
-            .replace("what is", "")
-            .replace("tell me about", "")
-            .replace("hey arjun", "")
-            .strip()
-        )
-        
-        # --- FIX: DON'T LET HIM GOOGLE HIMSELF ---
-        if topic and topic != "arjun": 
-            try:
-                update_gui_status(f"Searching Wikipedia for {topic}...")
-                summary = wikipedia.summary(topic, sentences=2)
-                knowledge_context = f"\n\n[Context: {summary}]"
-                say(f"I found this on Wikipedia about {topic}.")
-            except Exception:
-                pass # Silent fail is better than crashing
-        # -----------------------------------------
+    query, query_lower = _sanitize_query(query)
+    knowledge_context = _knowledge_context(query, query_lower, say, update_gui_status)
 
     full_query = f"{query}{knowledge_context}"
 
-    # 2. MANAGE HISTORY (Prevent infinite growth)
     if not state.chat_history:
         state.chat_history.append({"role": "system", "content": state.system_prompt})
-    
-    # Keep system prompt + last N messages
-    if len(state.chat_history) > MAX_HISTORY_LIMIT:
-        state.chat_history = [state.chat_history[0]] + state.chat_history[-(MAX_HISTORY_LIMIT-1):]
+
+    state.chat_history = _trim_history(state.chat_history)
+    if len(state.chat_history) > 8:
+        state.chat_history = [state.chat_history[0]] + state.chat_history[-7:]
 
     state.chat_history.append({"role": "user", "content": full_query})
 
-    # 3. SELECT BRAIN
-    if state.current_persona == "friendly":
-        model_name = "arjun-custom"
-    else:
-        model_name = "gemma:2b"
+    model_name = PERSONA_MODELS.get(state.current_persona, "arjun-custom")
+    chat_options = FRIENDLY_CHAT_OPTIONS if state.current_persona == "friendly" else JARVIS_CHAT_OPTIONS
 
     try:
-        resp = ollama.chat(model=model_name, messages=state.chat_history,keep_alive="60m")
+        resp = ollama.chat(model=model_name, messages=state.chat_history, keep_alive="60m", options=chat_options)
         reply = resp["message"]["content"].strip()
-        
-        # Cleanup response
+
         reply = apply_persona_style(reply, state)
-        
+        if state.current_persona == "friendly":
+            reply = _enrich_friendly_reply(query_lower, reply)
+
         say(reply)
         state.chat_history.append({"role": "assistant", "content": reply})
         log_episode(query, reply, "chat", True)
@@ -89,7 +175,6 @@ def chat(query: str, state: MemoryState, say, update_gui_status):
         say("I'm having trouble connecting to my brain.")
         log_episode(query, "", "chat", False, str(e))
 
-# ... (Keep ai_generate and self_evaluate_and_improve exactly as they were) ...
 def ai_generate(prompt: str, state: MemoryState, say, update_gui_status, speak_result=False):
     update_gui_status("Generating...")
     full_prompt = f"{state.system_prompt}\n\nUser's request: {prompt}"
@@ -122,7 +207,7 @@ def self_evaluate_and_improve(state: MemoryState, say):
 
     try:
         with open(paths.episode_log, "r", encoding="utf-8") as f:
-            lines = f.readlines()[-50:]
+            lines = deque(f, maxlen=50)
     except Exception as e:
         print(f"Read log error: {e}")
         say("I had trouble reading my logs.")
