@@ -7,10 +7,6 @@ import os
 import subprocess
 
 CONTACTS = {
-    "surya": "+919823711834",
-    "didi": "+918329675587",
-    "mummy": "+919923499314",
-    "papa": "+919158990179"
 }
 
 def parse_send_message_command(text: str):
