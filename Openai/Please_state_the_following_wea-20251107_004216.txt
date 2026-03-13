@@ -1,0 +1,6 @@
+Prompt: Please state the following weather in a natural way: Sunny +15°C ↘19km/h
+
+Response:
+Sure. Here is the weather statement in a natural way:
+
+The sun is shining brightly, and the temperature is around 15°C. The wind is blowing gently, blowing in the direction of the sun, with a speed of 19 km/h.

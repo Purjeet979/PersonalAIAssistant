@@ -1,0 +1,6 @@
+Prompt: Please state the following weather in a natural way: Haze +27°C ↓16km/h
+
+Response:
+Sure, here's the weather stated in a natural way:
+
+The weather is hazy with a temperature of 27°C, and the wind is blowing at a speed of 16 km/h.

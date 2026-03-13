@@ -1,0 +1,6 @@
+Prompt: Please state the following weather in a natural way: Haze +28°C ↓10km/h
+
+Response:
+Sure. Here's the weather in a natural way:
+
+The haze is thick and dark, like a blanket obscuring the sun. The temperature is around 28°C, indicating a warm and sunny day. The wind is blowing at a speed of 10km/h, which is relatively gentle.
