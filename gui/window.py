@@ -10,7 +10,7 @@ from jarvis.paths import paths
 def run_app():
 
     WINDOW_WIDTH = 280
-    WINDOW_BASE_HEIGHT = 350
+    WINDOW_BASE_HEIGHT = 390
 
     root = tk.Tk()
     root.title("Arjun")
@@ -182,6 +182,53 @@ def run_app():
     quit_button.bind(
         "<Leave>", lambda e: on_button_leave(e, quit_button, QUIT_COLOR)
     )
+
+    def gui_good_feedback():
+        if assistant.save_last_interaction("good"):
+            set_status("Feedback: Saved as 👍 Good response!")
+        else:
+            set_status("No recent response to rate.")
+
+    def gui_bad_feedback():
+        if assistant.save_last_interaction("bad"):
+            set_status("Feedback: Saved as 👎 Bad response.")
+        else:
+            set_status("No recent response to rate.")
+
+    feedback_frame = tk.Frame(root, bg=BG_COLOR)
+    feedback_frame.pack(fill="x", padx=15, pady=(0, 15))
+    feedback_frame.columnconfigure(0, weight=1)
+    feedback_frame.columnconfigure(1, weight=1)
+
+    good_btn = tk.Button(
+        feedback_frame,
+        text="👍 Good",
+        command=gui_good_feedback,
+        bg="#2E7D32",
+        fg=TEXT_COLOR,
+        font=("Segoe UI", 11),
+        relief="flat",
+        borderwidth=0,
+        pady=5,
+    )
+    good_btn.grid(row=0, column=0, sticky="ew", padx=4)
+    good_btn.bind("<Enter>", lambda e: on_button_enter(e, good_btn, "#388E3C"))
+    good_btn.bind("<Leave>", lambda e: on_button_leave(e, good_btn, "#2E7D32"))
+
+    bad_btn = tk.Button(
+        feedback_frame,
+        text="👎 Bad",
+        command=gui_bad_feedback,
+        bg="#C62828",
+        fg=TEXT_COLOR,
+        font=("Segoe UI", 11),
+        relief="flat",
+        borderwidth=0,
+        pady=5,
+    )
+    bad_btn.grid(row=0, column=1, sticky="ew", padx=4)
+    bad_btn.bind("<Enter>", lambda e: on_button_enter(e, bad_btn, "#D32F2F"))
+    bad_btn.bind("<Leave>", lambda e: on_button_leave(e, bad_btn, "#C62828"))
 
     def move_window(event):
         root.geometry(
