@@ -15,17 +15,51 @@ def parse_send_message_command(text: str):
 
     text = text.strip().lower()
 
-    pattern = r"(.+?)\s+ko\s+message\s+karo\s+ki\s+(.+)"
-    m = re.match(pattern, text)
-    if not m:
-        return None, None
+    # Strip leading assistant names like "arjun", "jarvis", "hey arjun", "hey jarvis"
+    text = re.sub(r"^(arjun|jarvis|hey arjun|hey jarvis)\s+", "", text).strip()
 
-    contact_name = m.group(1).strip()
-    message = m.group(2).strip()
-    if not contact_name or not message:
-        return None, None
+    # Pattern 1: Hinglish with "message karke poochho ki" / "message karke poochho" / "message karo ki" / "message karo"
+    # Matches: [Name] ko message [karo/karke/poochho/karke poochho] [ki] [Message]
+    hinglish_pattern = r"(.+?)\s+ko\s+message\s+(?:karo|karke\s+poochho|karke|poochho)\s+(?:ki\s+)?(.+)"
+    m = re.match(hinglish_pattern, text)
+    if m:
+        contact_name = m.group(1).strip()
+        message = m.group(2).strip()
+        return contact_name, message
 
-    return contact_name, message
+    # Pattern 2: Simple Hinglish [Name] ko message [Message] (without karo/ki)
+    # Matches: [Name] ko message [Message]
+    hinglish_simple = r"(.+?)\s+ko\s+message\s+(.+)"
+    m = re.match(hinglish_simple, text)
+    if m:
+        contact_name = m.group(1).strip()
+        message = m.group(2).strip()
+        # Verify message doesn't start with keywords like "karo" or "ki"
+        message = re.sub(r"^(karo|ki|karke|poochho)\s+", "", message).strip()
+        return contact_name, message
+
+    # Pattern 3: English - send (a) message to [Name] saying/that [Message]
+    english_pattern1 = r"(?:send\s+(?:a\s+)?)?message\s+to\s+(.+?)\s+(?:saying|that|ki)\s+(.+)"
+    m = re.match(english_pattern1, text)
+    if m:
+        return m.group(1).strip(), m.group(2).strip()
+
+    # Pattern 4: English - send [Name] a message saying/that [Message]
+    english_pattern2 = r"send\s+(.+?)\s+(?:a\s+)?message\s+(?:saying|that|ki)\s+(.+)"
+    m = re.match(english_pattern2, text)
+    if m:
+        return m.group(1).strip(), m.group(2).strip()
+
+    # Pattern 5: English - message [Name] [Message]
+    english_pattern3 = r"message\s+(.+?)\s+(.+)"
+    m = re.match(english_pattern3, text)
+    if m:
+        contact_name = m.group(1).strip()
+        # Filter out common names that might be a false positive
+        if contact_name in CONTACTS:
+            return contact_name, m.group(2).strip()
+
+    return None, None
 
 def resolve_contact(name: str) -> str | None:
     if not name:
