@@ -8,6 +8,7 @@ from jarvis.logger import log_episode
 from .memory import MemoryState, load_memory, remember_fact
 from .ai_engine import chat as ai_chat, ai_generate, self_evaluate_and_improve
 from .commands import load_commands, save_commands, learn_new_command, run_custom_commands
+from .paths import paths
 from .features import (
     check_command,
     take_note, read_notes, find_file,
@@ -42,6 +43,27 @@ JOKE_TRIGGERS = ("tell me a joke", "say a joke", "make me laugh")
 SHUTDOWN_TRIGGERS = ("shutdown", "turn off", "power off")
 RESTART_TRIGGERS = ("restart", "reboot")
 SELF_IMPROVE_TRIGGERS = ("optimize yourself", "improve yourself", "update yourself", "upgrade yourself")
+YOUTUBE_SEARCH_TRIGGERS = (
+    "search on youtube",
+    "youtube search",
+    "search youtube",
+    "youtube par search",
+    "youtube me search",
+    "youtube pe search",
+    "youtube pe dekh",
+    "youtube par dekh",
+    "on youtube",
+)
+YOUTUBE_PLAY_TRIGGERS = (
+    "play on youtube",
+    "youtube play",
+    "youtube pe play",
+    "youtube par play",
+    "youtube me play",
+    "play on youtube for",
+)
+GOOD_FEEDBACK_TRIGGERS = ("good job", "nice response", "nice answer", "great job", "sahi jawab", "correct answer")
+BAD_FEEDBACK_TRIGGERS = ("bad response", "bad answer", "wrong answer", "incorrect response", "that was bad", "galat jawab")
 
 class JarvisAssistant:
     def __init__(self, gui_queue, update_gui_status):
@@ -54,6 +76,8 @@ class JarvisAssistant:
         self.commands = load_commands()
         self.force_sleep_toggle = False
         self.display_name = "Arjun"
+        self.last_query = ""
+        self.last_reply = ""
 
     def _contains_any(self, text, phrases):
         return any(p in text for p in phrases)
@@ -108,6 +132,16 @@ class JarvisAssistant:
             find_file(self.audio, self.update_gui_status)
             return "handled"
 
+        if self._contains_any(lower_q, YOUTUBE_SEARCH_TRIGGERS):
+            from .features import search_youtube
+            search_youtube(query, self.audio)
+            return "handled"
+
+        if self._contains_any(lower_q, YOUTUBE_PLAY_TRIGGERS):
+            from .features import play_youtube_video
+            play_youtube_video(query, self.audio)
+            return "handled"
+
         if self._contains_any(lower_q, GMAIL_SUMMARY_TRIGGERS):
             self.update_gui_status("Fetching Gmail summary...")
             self.audio.say(gmail_summary_text())
@@ -130,10 +164,14 @@ class JarvisAssistant:
 
         if check_command(lower_q, ["play", "open", "start"], ["music", "song", "track"]):
             self._say_by_persona("Starting your music.", "Starting music playback.")
-            music_path = r"C:\Users\PURJEET\Downloads\song.mp3"
+            import os
+            downloads_dir = paths.get_user_folder("downloads")
+            music_path = os.path.join(downloads_dir, "song.mp3")
             try:
-                import os
-                os.system(f"start {music_path}")
+                if not os.path.exists(music_path):
+                    self.audio.say("I couldn't find song.mp3 in your downloads folder.")
+                else:
+                    os.startfile(music_path)
             except Exception as e:
                 print(e)
                 self.audio.say("I couldn't play that music file.")
@@ -221,12 +259,31 @@ class JarvisAssistant:
             load_memory(self.state)
             return "handled"
 
+        if self._contains_any(lower_q, GOOD_FEEDBACK_TRIGGERS):
+            if self.save_last_interaction("good"):
+                self.audio.say("Thanks for the feedback! Saved as a good response.")
+            else:
+                self.audio.say("I don't have a recent response to log.")
+            return "handled"
+
+        if self._contains_any(lower_q, BAD_FEEDBACK_TRIGGERS):
+            if self.save_last_interaction("bad"):
+                self.audio.say("Thanks for the feedback. Logged as a bad response.")
+            else:
+                self.audio.say("I don't have a recent response to log.")
+            return "handled"
+
         if self._contains_any(lower_q, SELF_IMPROVE_TRIGGERS):
             self.audio.say("Okay, I will review recent interactions and try to improve.")
             self_evaluate_and_improve(self.state, self.audio.say)
             return "handled"
 
-        ai_chat(query, self.state, self.audio.say, self.update_gui_status)
+        def custom_say(text: str):
+            self.last_query = query
+            self.last_reply = text
+            self.audio.say(text)
+
+        ai_chat(query, self.state, custom_say, self.update_gui_status)
         return "handled"
 
     def set_persona(self, mode: str):
@@ -253,6 +310,16 @@ class JarvisAssistant:
         else:
             self.audio.say("I don't recognise that personality mode.")
 
+    def save_last_interaction(self, rating: str) -> bool:
+        if not self.last_query or not self.last_reply:
+            return False
+        from .rewards import log_feedback
+        success = log_feedback(self.last_query, self.last_reply, rating)
+        if success:
+            self.last_query = ""
+            self.last_reply = ""
+        return success
+
     def toggle_sleep(self):
         self.force_sleep_toggle = True
 
@@ -278,7 +345,7 @@ class JarvisAssistant:
 
                 if self.audio.is_asleep:
                     query = self.audio.listen()
-                    if "hey arjun" in query or "wake up" in query:
+                    if "hey arjun" in query or "hey jarvis" in query or "wake up" in query:
                         self.audio.set_sleep(False)
                         self.gui_queue.put("STATE:AWAKE")
                         self._say_by_persona("I am online and ready.", "Online.")
