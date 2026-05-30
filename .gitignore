@@ -42,3 +42,12 @@ token.json
 credentials.json
 client_secret.json
 *.pickle
+
+# Ignore local databases and temp files
+.chroma/
+.chroma_test/
+temp_speech.mp3
+temp_speech_*.mp3
+temp_sonia_speech.mp3
+test_speech_*.mp3
+test_sonia_speech.mp3
