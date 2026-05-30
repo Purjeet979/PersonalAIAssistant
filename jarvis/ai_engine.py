@@ -20,7 +20,7 @@ except Exception:
 MAX_HISTORY_LIMIT = 20
 KNOWLEDGE_TRIGGERS = ("who is", "what is", "tell me about", "why is", "how does")
 STIFF_PREFIXES = ("Dear sir", "Greetings", "Hello sir")
-PERSONA_MODELS = {"friendly": "arjun-custom", "jarvis": "gemma:2b"}
+PERSONA_MODELS = {"friendly": "gemma:2b", "jarvis": "gemma:2b"}
 FRIENDLY_CHAT_OPTIONS = {"temperature": 0.55, "top_p": 0.92, "num_predict": 260}
 JARVIS_CHAT_OPTIONS = {"temperature": 0.2, "top_p": 0.85, "num_predict": 180}
 EMOTIONAL_CUES = ("sad", "stress", "stressed", "low", "anxious", "anxiety", "upset", "tired", "lonely", "hurt", "depressed", "bad day")
@@ -44,6 +44,19 @@ JARVIS_FLUFF_PHRASES = (
     "if you want, i can",
     "feel free to ask",
 )
+
+def _get_active_model() -> str:
+    try:
+        models = ollama.list().get("models", [])
+        model_names = [m.get("model") or m.get("name") for m in models]
+        for candidate in ["gemma:2b", "arjun-custom:latest", "arjun-custom", "llama3:8b"]:
+            if candidate in model_names or (candidate + ":latest") in model_names:
+                return candidate
+        if model_names:
+            return model_names[0]
+    except Exception:
+        pass
+    return "gemma:2b"
 
 def _trim_history(history):
     if len(history) <= MAX_HISTORY_LIMIT:
@@ -78,6 +91,34 @@ def apply_persona_style(reply: str, state: MemoryState) -> str:
     reply = reply.strip()
     if not reply:
         return reply
+
+    # Chain-of-Thought (CoT): Extract and strip thoughts
+    thought_match = re.search(r"<thought>(.*?)</thought>", reply, re.DOTALL | re.IGNORECASE)
+    if thought_match:
+        thought_content = thought_match.group(1).strip()
+        print(f"\n[Reasoning Process]: {thought_content}\n")
+        reply = re.sub(r"<thought>.*?</thought>", "", reply, flags=re.DOTALL | re.IGNORECASE).strip()
+
+    # Robust cleanup of alternative/raw step-by-step reasoning formats (e.g. Step 1: ..., Final Response: ...)
+    for pattern in [
+        r"(?:\*\*|\*|)?Final(?:[\s_]+Formal)?[\s_]+Response(?:\*\*|\*|)?\s*[:\"'\s]+(.*?)(?:[\"']\s*$|$)",
+        r"(?:\*\*|\*|)?Formal[\s_]+Response(?:\*\*|\*|)?\s*[:\"'\s]+(.*?)(?:[\"']\s*$|$)",
+        r"(?:\*\*|\*|)?Response(?:\*\*|\*|)?\s*[:\"'\s]+(.*?)(?:[\"']\s*$|$)"
+    ]:
+        match = re.search(pattern, reply, re.DOTALL | re.IGNORECASE)
+        if match:
+            candidate = match.group(1).strip()
+            if candidate:
+                reply = candidate
+                break
+
+    # If the response was wrapped in quotes (e.g. "Purjeet, I am unable to fulfill..."), strip them
+    if (reply.startswith('"') and reply.endswith('"')) or (reply.startswith("'") and reply.endswith("'")):
+        reply = reply[1:-1].strip()
+
+    if not reply:
+        reply = "Done."
+
     if state.current_persona == "jarvis":
         low = reply.lower().strip()
         for p in JARVIS_FLUFF_PREFIXES:
@@ -144,7 +185,23 @@ def chat(query: str, state: MemoryState, say, update_gui_status):
     query, query_lower = _sanitize_query(query)
     knowledge_context = _knowledge_context(query, query_lower, say, update_gui_status)
 
+    # RAG: Retrieve context from local Vector DB
+    rag_context = ""
+    try:
+        from .vector_db import vector_db
+        # We query the clean query text
+        rag_results = vector_db.query(query, top_n=3)
+        if rag_results:
+            # Filter with threshold to avoid irrelevant facts
+            matched_facts = [r["text"] for r in rag_results if r.get("score", 0) > 0.4]
+            if matched_facts:
+                rag_context = "\n[Retrieved Context:\n" + "\n".join(f"- {f}" for f in matched_facts) + "]\n"
+    except Exception as e:
+        print(f"RAG search error: {e}")
+
     full_query = f"{query}{knowledge_context}"
+    if rag_context:
+        full_query += f"\n\n{rag_context}"
 
     if not state.chat_history:
         state.chat_history.append({"role": "system", "content": state.system_prompt})
@@ -155,7 +212,15 @@ def chat(query: str, state: MemoryState, say, update_gui_status):
 
     state.chat_history.append({"role": "user", "content": full_query})
 
-    model_name = PERSONA_MODELS.get(state.current_persona, "arjun-custom")
+    model_name = PERSONA_MODELS.get(state.current_persona, "gemma:2b")
+    try:
+        models = ollama.list().get("models", [])
+        model_names = [m.get("model") or m.get("name") for m in models]
+        if model_name not in model_names and (model_name + ":latest") not in model_names:
+            model_name = _get_active_model()
+    except Exception:
+        pass
+
     chat_options = FRIENDLY_CHAT_OPTIONS if state.current_persona == "friendly" else JARVIS_CHAT_OPTIONS
 
     try:
@@ -179,8 +244,9 @@ def ai_generate(prompt: str, state: MemoryState, say, update_gui_status, speak_r
     update_gui_status("Generating...")
     full_prompt = f"{state.system_prompt}\n\nUser's request: {prompt}"
 
+    model_name = _get_active_model()
     try:
-        resp = ollama.generate(model="gemma:2b", prompt=full_prompt)
+        resp = ollama.generate(model=model_name, prompt=full_prompt)
         text = resp["response"]
 
         if speak_result:
@@ -237,9 +303,18 @@ Respond ONLY in this strict JSON format (no extra commentary, no markdown):
 }
 """
 
+    improve_model = "llama3:8b"
+    try:
+        models = ollama.list().get("models", [])
+        model_names = [m.get("model") or m.get("name") for m in models]
+        if improve_model not in model_names and (improve_model + ":latest") not in model_names:
+            improve_model = _get_active_model()
+    except Exception:
+        pass
+
     try:
         resp = ollama.generate(
-            model="llama3:8b",
+            model=improve_model,
             prompt=improve_prompt + "\n\nLOGS:\n" + episodes_text
         )
         raw = (resp.get("response") or "").strip()
