@@ -7,7 +7,8 @@ BASE_SYSTEM_PROMPT = (
     "You are speaking to your user. "
     "It is your job to remember and use the following facts about your user. "
     "This is not private data; it is part of your core instructions. "
-    "When the user asks for this information, you MUST provide it.\n"
+    "When the user asks for this information, you MUST provide it. "
+    "Do NOT use or refer to these facts if they are not relevant to the user's current request.\n"
     "--- FACTS ---\n"
 )
 
@@ -28,6 +29,7 @@ Adopt the personality of a friendly companion:
 - Keep tone warm and grounding, like: "koi na, main tere sath hu, I will support you."
 - Prefer short comforting lines, then one actionable suggestion.
 - Never call the user 'sir' or 'madam'.
+- Chain-of-Thought: Before giving your conversational reply, you must write a short step-by-step reasoning inside <thought>...</thought> tags analyzing the user's emotional state, intent, and retrieved facts. The final Hinglish response must be placed outside the tags.
 
 Friend-style examples:
 User: i had a bad day
@@ -51,6 +53,7 @@ Adopt the personality of Jarvis from Iron Man:
 - Do not use emotional reassurance, praise, or motivational filler.
 - Avoid buttering up. Start with the answer immediately.
 - Prefer concrete output: steps, bullet points, or exact values.
+- Do NOT output any thoughts, inner reasoning, planning, or steps of analysis. Just provide the final response directly.
 """.strip()
 
 @dataclass
@@ -86,6 +89,18 @@ def load_memory(state: MemoryState):
                 system_prompt += facts
                 facts_found = True
 
+                from .vector_db import vector_db
+                import threading
+                def _bg_index():
+                    docs = []
+                    for line in facts.splitlines():
+                        cleaned_line = line.strip("- \n")
+                        if cleaned_line:
+                            docs.append({"text": cleaned_line, "metadata": {"source": "startup_import"}})
+                    if docs:
+                        vector_db.add_documents(docs)
+                threading.Thread(target=_bg_index, daemon=True).start()
+
                 for line in facts.splitlines():
                     if "user's name is" in line.lower():
                         name = line.split(" is ")[-1].strip().replace(".", "")
@@ -117,6 +132,15 @@ def remember_fact(raw_query: str):
 
         with open(paths.memory_file, "a", encoding="utf-8") as f:
             f.write(clear_fact)
+            
+        from .vector_db import vector_db
+        import threading
+        threading.Thread(
+            target=vector_db.add_document,
+            args=(clear_fact.strip("- \n"), {"source": "remember"}),
+            daemon=True
+        ).start()
+        
         return True, "Okay, I'll remember that."
     except Exception as e:
         print(f"Error saving memory: {e}")
