@@ -43,7 +43,7 @@
         "trigger": "whatsapp",
         "type": "app",
         "target": "whatsapp://",
-        "process_name": "WhatsApp.exe"
+        "process_name": "WhatsApp.Root.exe, WhatsApp.exe"
         }
     ]
 }
