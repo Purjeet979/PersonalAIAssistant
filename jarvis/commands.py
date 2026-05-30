@@ -121,7 +121,7 @@ def run_custom_commands(query, commands, audio_mgr, update_gui_status, state):
                     say(f"Getting the weather for {city}...")
                     try:
                         url = f"https://wttr.in/{city}?format=%C+%t+%w"
-                        response = requests.get(url)
+                        response = requests.get(url, timeout=5)
                         if response.status_code == 200:
                             weather_data = response.text
                             ai_prompt = (
@@ -137,17 +137,37 @@ def run_custom_commands(query, commands, audio_mgr, update_gui_status, state):
                 log_episode(query, f"Opened {cmd['trigger']}", "custom_command_open", True)
                 return True
 
-            if cmd["type"] == "app" and any(a in query for a in CLOSE_ACTIONS):
-                try:
-                    if "process_name" in cmd and cmd["process_name"]:
-                        import os
-                        os.system(f'taskkill /IM "{cmd["process_name"]}" /F')
-                        say(f"Closing {cmd['trigger']}.")
-                    else:
-                        say(f"Sorry, I don't know the process name for {cmd['trigger']}.")
-                except Exception as e:
-                    print(f"Error closing app: {e}")
-                    say(f"Sorry, I had trouble trying to close {cmd['trigger']}.")
+            if any(a in query for a in CLOSE_ACTIONS):
+                if cmd["type"] == "app":
+                    try:
+                        if "process_name" in cmd and cmd["process_name"]:
+                            import os
+                            for proc in cmd["process_name"].split(","):
+                                proc_clean = proc.strip()
+                                if proc_clean:
+                                    os.system(f'taskkill /IM "{proc_clean}" /F')
+                            say(f"Closing {cmd['trigger']}.")
+                        else:
+                            say(f"Sorry, I don't know the process name for {cmd['trigger']}.")
+                    except Exception as e:
+                        print(f"Error closing app: {e}")
+                        say(f"Sorry, I had trouble trying to close {cmd['trigger']}.")
+                elif cmd["type"] == "website":
+                    try:
+                        import pygetwindow as gw
+                        trigger_lower = cmd["trigger"].lower()
+                        closed_any = False
+                        for w in gw.getAllWindows():
+                            if trigger_lower in w.title.lower():
+                                w.close()
+                                closed_any = True
+                        if closed_any:
+                            say(f"Closing {cmd['trigger']}.")
+                        else:
+                            say(f"I couldn't find any open window for {cmd['trigger']}.")
+                    except Exception as e:
+                        print(f"Error closing website window: {e}")
+                        say(f"Sorry, I had trouble trying to close {cmd['trigger']}.")
 
                 log_episode(query, f"Closed {cmd['trigger']}", "custom_command_close", True)
                 return True
