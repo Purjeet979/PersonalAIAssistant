@@ -62,8 +62,7 @@ def find_file(audio_mgr, update_gui_status):
         say("I didn't catch that. Cancelling.")
         return
 
-    home_dir = os.path.expanduser("~")
-    search_path = os.path.join(home_dir, folder_name.title())
+    search_path = paths.get_user_folder(folder_name)
     if not os.path.exists(search_path):
         say(f"Sorry, I couldn't find a folder named {folder_name}.")
         return
@@ -155,17 +154,46 @@ def set_timer(query, audio_mgr):
 
 def simple_weather(query, audio_mgr, state, update_gui_status):
     say = audio_mgr.say
-    if "weather in" not in query:
+    lower_q = query.lower()
+    
+    if "weather" not in lower_q and "temperature" not in lower_q and "temp" not in lower_q:
         return False
+        
+    city = None
+    
+    # List of search patterns
+    patterns = [
+        r"(?:weather|temperature|temp)\s+(?:today\s+)?(?:in|of|at|for)\s+([a-z\s]+)",
+        r"(?:weather|temperature|temp)\s+([a-z]+)",
+        r"([a-z]+)\s+(?:weather|temperature|temp)"
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, lower_q)
+        if match:
+            candidate = match.group(1).strip()
+            # Exclude common non-city words
+            if candidate not in ("today", "tomorrow", "now", "current", "report", "forecast", "like", "in", "of"):
+                city = candidate
+                break
+                
+    if not city:
+        city = "Delhi"
+        
+    # Clean up city name
+    city = re.sub(r"\b(today|tomorrow|now|current|report|forecast|like|please)\b", "", city).strip()
+    
+    if not city:
+        city = "Delhi"
+        
     try:
-        city = query.split("in")[-1].strip()
         say(f"Getting the weather for {city}...")
         url = f"https://wttr.in/{city}?format=%C+%t+%w"
-        resp = requests.get(url)
+        resp = requests.get(url, timeout=5)
         if resp.status_code != 200:
             say("Sorry, I couldn't retrieve the weather for that location.")
             return True
-        weather_data = resp.text
+        weather_data = resp.text.strip()
         prompt = (
             "You are a weather reporter. State the following weather data "
             f"in one simple sentence, starting directly with the conditions: {weather_data}"
@@ -177,6 +205,29 @@ def simple_weather(query, audio_mgr, state, update_gui_status):
         say("Sorry, I had trouble connecting to the weather service.")
         return True
 
+def get_backup_news():
+    try:
+        import urllib.request
+        import xml.etree.ElementTree as ET
+        url = "https://news.google.com/rss?hl=en-IN&gl=IN&ceid=IN:en"
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=5) as response:
+            xml_data = response.read()
+        
+        root = ET.fromstring(xml_data)
+        titles = []
+        for item in root.findall('.//item')[:5]:
+            title = item.find('title').text
+            # Clean up source site name at the end (e.g. "- Times of India")
+            title_clean = re.sub(r"\s+-\s+[^-]+$", "", title).strip()
+            titles.append(f"- {title_clean}")
+        if titles:
+            return titles, None
+    except Exception as e:
+        print(f"Backup news error: {e}")
+    return None, "I had trouble connecting to the news service."
+
 def get_latest_news():
     try:
         newsapi = NewsApiClient(api_key=config.NEWS_API_KEY)
@@ -187,15 +238,14 @@ def get_latest_news():
             page_size=5
         )
 
-        if headlines.get("status") != "ok" or headlines.get("totalResults", 0) == 0:
-            return None, "I couldn't find any top headlines right now."
-
-        titles = [f"- {article['title']}" for article in headlines.get("articles", [])]
-        return titles, None
-
+        if headlines.get("status") == "ok" and headlines.get("totalResults", 0) > 0:
+            titles = [f"- {article['title']}" for article in headlines.get("articles", [])]
+            return titles, None
     except Exception as e:
         print(f"NewsAPI error: {e}")
-        return None, "I had trouble connecting to the news service. Please check the API key."
+
+    print("NewsAPI failed or is unavailable. Trying backup Google News RSS...")
+    return get_backup_news()
 
 def speak_latest_news(audio_mgr, state, update_gui_status):
     say = audio_mgr.say
@@ -311,3 +361,94 @@ def restart_pc(audio_mgr):
         os.system("shutdown /r /t 1")
     else:
         say("Restart cancelled.")
+
+def extract_youtube_search_query(query: str) -> str:
+    lower_query = query.lower()
+    
+    # Remove trigger patterns with word boundaries to avoid partial word matching
+    patterns = [
+        r"\bsearch\s+on\s+youtube\s+for\b",
+        r"\bsearch\s+youtube\s+for\b",
+        r"\bsearch\s+on\s+youtube\b",
+        r"\bsearch\s+youtube\b",
+        r"\byoutube\s+search\b",
+        r"\byoutube\s+par\s+search\s+karo\b",
+        r"\byoutube\s+me\s+search\s+karo\b",
+        r"\byoutube\s+pe\s+search\s+karo\b",
+        r"\byoutube\s+par\s+search\b",
+        r"\byoutube\s+me\s+search\b",
+        r"\byoutube\s+pe\s+search\b",
+        r"\byoutube\s+pe\s+dekh\b",
+        r"\byoutube\s+par\s+dekh\b",
+        r"\byoutube\s+par\b",
+        r"\byoutube\s+pe\b",
+        r"\bon\s+youtube\b",
+        r"\bin\s+youtube\b",
+    ]
+    
+    clean_query = lower_query
+    for pattern in patterns:
+        clean_query = re.sub(pattern, "", clean_query, flags=re.IGNORECASE).strip()
+        
+    # Clean trailing or leading helper words
+    clean_query = re.sub(r"^(karo|please|for|about|dekh|show|play|search)\b", "", clean_query).strip()
+    clean_query = re.sub(r"\b(karo|please|dekh|dikhao|search)$", "", clean_query).strip()
+    
+    return clean_query
+
+def search_youtube(query: str, audio_mgr):
+    say = audio_mgr.say
+    search_term = extract_youtube_search_query(query)
+    if not search_term:
+        say("What would you like to search on YouTube?")
+        return
+    
+    say(f"Searching YouTube for {search_term}.")
+    import webbrowser
+    import urllib.parse
+    encoded = urllib.parse.quote(search_term)
+    webbrowser.open(f"https://www.youtube.com/results?search_query={encoded}")
+
+def play_youtube_video(query: str, audio_mgr):
+    say = audio_mgr.say
+    search_term = extract_youtube_search_query(query)
+    
+    # Strip any extra action words like play, chalao, bajao, etc.
+    search_term = re.sub(r"^(play|chalao|start|chalaye|baja|bajao)\b", "", search_term).strip()
+    search_term = re.sub(r"\b(play|chalao|start|chalaye|baja|bajao)$", "", search_term).strip()
+    
+    if not search_term:
+        say("What would you like me to play on YouTube?")
+        return
+        
+    say(f"Playing {search_term} on YouTube.")
+    
+    import threading
+    def _bg_play():
+        try:
+            from playwright.sync_api import sync_playwright
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=False, args=["--start-maximized"])
+                context = browser.new_context(no_viewport=True)
+                page = context.new_page()
+                
+                import urllib.parse
+                encoded = urllib.parse.quote(search_term)
+                page.goto(f"https://www.youtube.com/results?search_query={encoded}")
+                
+                page.wait_for_selector('ytd-video-renderer a#video-title', timeout=10000)
+                first_video = page.locator('ytd-video-renderer a#video-title').first
+                first_video.click()
+                
+                while True:
+                    if not browser.is_connected():
+                        break
+                    page.wait_for_timeout(1000)
+        except Exception as e:
+            print(f"Playwright error: {e}")
+            import webbrowser
+            import urllib.parse
+            encoded = urllib.parse.quote(search_term)
+            webbrowser.open(f"https://www.youtube.com/results?search_query={encoded}")
+            
+    threading.Thread(target=_bg_play, daemon=True).start()
