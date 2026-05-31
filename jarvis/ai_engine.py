@@ -151,14 +151,6 @@ def _enrich_friendly_reply(query_lower: str, reply: str) -> str:
     generic_reply = reply.lower().strip()
     looks_generic = any(g in generic_reply for g in GENERIC_REPLY_CUES)
 
-    if is_recipe_query and (words < 30 or looks_generic):
-        return (
-            "Perfect, egg sandwich banate hain. Quick recipe: 1) 2 ande bowl me todkar namak, kali mirch, thoda chopped pyaz mirchi mix karo. "
-            "2) Pan me thoda butter daalke mixture ko scramble ya omelette style paka lo. "
-            "3) 2 bread slices ko butter ke sath light toast karo. "
-            "4) Bread par mayo ya chutney lagao, egg filling rakho, chahe to cheese/tomato add karo, phir close karke 1 minute press-toast karo. "
-            "5) Half cut karke garam serve karo. Chahe to main spicy ya healthy version bhi bata du."
-        )
 
     if words > 10:
         return reply
@@ -179,6 +171,37 @@ def _enrich_friendly_reply(query_lower: str, reply: str) -> str:
         reply += "."
     return f"{reply} Koi na, main tere sath hu, I will support you. Tu chahe to bata kya hua, ya main abhi ek chhota next step suggest kar du?"
 
+def detect_intent(query: str, model_name: str) -> str:
+    prompt = f"""You are an intent classification engine. Analyze the user's query and map it to exactly one of the following intents:
+- BRIGHTNESS_UP (e.g., increase brightness, screen is dark)
+- BRIGHTNESS_DOWN (e.g., decrease brightness, eyes hurting, screen too bright)
+- VOL_UP (e.g., volume up, make it louder, awaz badhao)
+- VOL_DOWN (e.g., volume down, too loud, awaz kam kar)
+- YOUTUBE_PLAY (e.g., play song on youtube, gana laga)
+- SHUTDOWN (e.g., turn off pc, shutdown)
+- UNKNOWN (if none of the above match, or if it's general conversation)
+
+Query: '{query}'
+
+Respond ONLY with a JSON object in this exact format:
+{{"intent": "INTENT_NAME"}}
+"""
+    try:
+        resp = ollama.generate(model=model_name, prompt=prompt, format="json")
+        raw = resp.get("response", "").strip()
+        
+        # Robust JSON extraction
+        start = raw.find("{")
+        end = raw.rfind("}")
+        if start != -1 and end != -1 and end >= start:
+            clean_json = raw[start:end+1]
+            data = json.loads(clean_json)
+            return data.get("intent", "UNKNOWN")
+        return "UNKNOWN"
+    except Exception as e:
+        print(f"Intent Routing error: {e}")
+        return "UNKNOWN"
+
 def chat(query: str, state: MemoryState, say, update_gui_status):
     update_gui_status("Thinking...")
 
@@ -192,8 +215,8 @@ def chat(query: str, state: MemoryState, say, update_gui_status):
         # We query the clean query text
         rag_results = vector_db.query(query, top_n=3)
         if rag_results:
-            # Filter with threshold to avoid irrelevant facts
-            matched_facts = [r["text"] for r in rag_results if r.get("score", 0) > 0.4]
+            # Filter with threshold to avoid irrelevant facts (increased to 0.75 to prevent hallucinations)
+            matched_facts = [r["text"] for r in rag_results if r.get("score", 0) > 0.75]
             if matched_facts:
                 rag_context = "\n[Retrieved Context:\n" + "\n".join(f"- {f}" for f in matched_facts) + "]\n"
     except Exception as e:
