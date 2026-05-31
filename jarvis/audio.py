@@ -21,9 +21,12 @@ def play_audio_mci(file_path):
     except Exception as e:
         print(f"MCI playback error: {e}")
 
-async def _generate_speech(text: str, voice: str, path: str):
+async def _generate_speech(text: str, voice: str, path: str, rate: str = "+0%"):
     clean_text = re.sub(r"\*\*|\*", "", text)
-    communicate = edge_tts.Communicate(clean_text, voice)
+    clean_text = re.sub(r"<thought>.*?</thought>", "", clean_text, flags=re.DOTALL).strip()
+    if not clean_text:
+        clean_text = "Hmm."
+    communicate = edge_tts.Communicate(clean_text, voice, rate=rate)
     await communicate.save(path)
 
 def split_into_sentences(text: str) -> list[str]:
@@ -91,10 +94,10 @@ class AudioManager:
 
         with self.speak_lock:
             display_name = "Jarvis" if self.voice_profile == "jarvis" else "Arjun"
-            self.update_gui_status(f"{display_name}: {text}")
 
-            # Choose the neural voice
+            # Choose the neural voice and speech rate
             voice = "en-GB-SoniaNeural" if self.voice_profile == "jarvis" else "hi-IN-MadhurNeural"
+            rate = "+0%" if self.voice_profile == "jarvis" else "+70%"
 
             sentences = split_into_sentences(text)
             if not sentences:
@@ -111,7 +114,7 @@ class AudioManager:
                                 os.remove(path)
                             except Exception:
                                 pass
-                        asyncio.run(_generate_speech(s, voice, path))
+                        asyncio.run(_generate_speech(s, voice, path, rate))
                         if os.path.exists(path) and os.path.getsize(path) > 0:
                             q.put((path, s))
                         else:
@@ -123,11 +126,19 @@ class AudioManager:
 
             t = threading.Thread(target=downloader, daemon=True)
             t.start()
+            
+            first_sentence = True
+            fallback_engine = None
 
             while True:
                 path, s = q.get()
                 if path is None and s is None:
                     break
+                
+                # Show the text exactly when the first audio chunk is ready to play
+                if first_sentence:
+                    self.update_gui_status(f"{display_name}: {text}")
+                    first_sentence = False
 
                 if path:
                     play_audio_mci(path)
@@ -137,15 +148,16 @@ class AudioManager:
                         pass
                 else:
                     try:
-                        engine = pyttsx3.init()
-                        voices = engine.getProperty("voices") or []
-                        idx = 1 if len(voices) > 1 and self.voice_profile == "jarvis" else 0
-                        if voices:
-                            engine.setProperty("voice", voices[idx].id)
-                        engine.setProperty("rate", 165 if self.voice_profile == "jarvis" else 185)
-                        engine.say(s)
-                        engine.runAndWait()
-                        engine.stop()
+                        if fallback_engine is None:
+                            fallback_engine = pyttsx3.init()
+                            voices = fallback_engine.getProperty("voices") or []
+                            idx = 1 if len(voices) > 1 and self.voice_profile == "jarvis" else 0
+                            if voices:
+                                fallback_engine.setProperty("voice", voices[idx].id)
+                            fallback_engine.setProperty("rate", 165 if self.voice_profile == "jarvis" else 277)
+                        
+                        fallback_engine.say(s)
+                        fallback_engine.runAndWait()
                     except Exception as e:
                         print(f"Offline fallback TTS error: {e}")
 
