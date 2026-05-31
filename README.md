@@ -51,6 +51,14 @@ A reinforcement learning feedback loop that logs ratings:
 * **Model Fallbacks:** Checks local Ollama library models and falls back to active installed models dynamically if the preferred models (`gemma:2b` or `llama3:8b`) are missing.
 * **Thread-Safety Lock:** Uses `threading.Lock` inside the audio manager to prevent audio collisions from concurrent events (e.g. alarms/timers firing while speaking).
 
+### 🤖 8. Hybrid LLM Intent Router (Ollama JSON Mode)
+* **Zero-Shot Classification:** Instead of relying purely on hardcoded if/else triggers, the system utilizes Ollama's Native JSON output mode to map complex, unscripted user queries to specific hardware/software actions.
+* **Layered Architecture:** Maintains sub-millisecond response times for common commands while falling back to the intelligent LLM router for nuanced requests (like *"aankhein dukh rahi hai, light kam kar"*).
+
+### 🎨 9. Modern CustomTkinter UI & Aesthetics
+* **Dynamic Layouts:** Designed with `CustomTkinter` offering a transparent, borderless window with smooth curved edges and interactive dropdown toggle menus (`CTkOptionMenu`).
+* **Sci-Fi Elements:** Clean floating widget aesthetic powered by transparent background rendering and responsive color themes.
+
 ---
 
 ## 🛠️ Full Feature List
