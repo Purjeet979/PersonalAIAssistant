@@ -1,34 +1,44 @@
-
 import tkinter as tk
+import customtkinter as ctk
 from PIL import Image, ImageTk
 import threading
 import queue
-
+import pystray
 from jarvis.assistant import JarvisAssistant
 from jarvis.paths import paths
 
+# Set CustomTkinter Appearance
+ctk.set_appearance_mode("dark")
+ctk.set_default_color_theme("blue")
+
 def run_app():
+    WINDOW_WIDTH = 260
+    WINDOW_BASE_HEIGHT = 380
 
-    WINDOW_WIDTH = 280
-    WINDOW_BASE_HEIGHT = 390
-
-    root = tk.Tk()
+    root = ctk.CTk()
     root.title("Arjun")
     root.geometry(f"{WINDOW_WIDTH}x{WINDOW_BASE_HEIGHT}")
 
     current_wake_name = "Arjun"
     base_status_height = None
 
-    BG_COLOR = "#2B2B2B"
-    TEXT_COLOR = "#E0E0E0"
-    ACCENT_COLOR = "#A0DDEE"
-    QUIT_COLOR = "#C04040"
-    QUIT_HOVER = "#D05050"
-
-    root.configure(bg=BG_COLOR)
     root.overrideredirect(True)
     root.attributes("-topmost", True)
-    root.attributes("-alpha", 0.95)
+    root.attributes("-alpha", 1.0)
+
+    # Trick for borderless rounded corners in Windows (use magenta so it doesn't match GIF black pixels)
+    TRANSPARENT_COLOR = "#FF00FF"
+    root.configure(bg=TRANSPARENT_COLOR, fg_color=TRANSPARENT_COLOR)
+    root.attributes("-transparentcolor", TRANSPARENT_COLOR)
+
+    # Main container with broader rounded corners
+    main_frame = ctk.CTkFrame(
+        root, 
+        fg_color="#000000", 
+        corner_radius=30, 
+        bg_color=TRANSPARENT_COLOR
+    )
+    main_frame.pack(fill="both", expand=True)
 
     gui_queue = queue.Queue()
 
@@ -38,17 +48,37 @@ def run_app():
     try:
         gif = Image.open(paths.assistant_gif)
         frames = []
-        w, h = 250, 180
+        # Reduced GIF size to fit smaller window
+        w, h = 200, 140
+        
+        orig_w, orig_h = gif.size
+        left = int(orig_w * 0.20)
+        top = int(orig_h * 0.20)
+        right = int(orig_w * 0.80)
+        bottom = int(orig_h * 0.80)
+        
         if hasattr(gif, "n_frames"):
             for i in range(gif.n_frames):
                 gif.seek(i)
-                frame = gif.copy().resize((w, h), Image.LANCZOS)
-                frames.append(ImageTk.PhotoImage(frame))
+                # Convert to RGBA to fix palette resizing glitches
+                frame_rgba = gif.copy().convert("RGBA")
+                cropped = frame_rgba.crop((left, top, right, bottom))
+                resized = cropped.resize((w, h), Image.LANCZOS)
+                
+                # Composite over black background to prevent Tkinter alpha issues
+                bg = Image.new("RGBA", resized.size, (0, 0, 0, 255))
+                frame_final = Image.alpha_composite(bg, resized)
+                frames.append(ImageTk.PhotoImage(frame_final))
         else:
-            frames.append(ImageTk.PhotoImage(gif.resize((w, h), Image.LANCZOS)))
+            frame_rgba = gif.copy().convert("RGBA")
+            cropped = frame_rgba.crop((left, top, right, bottom))
+            resized = cropped.resize((w, h), Image.LANCZOS)
+            bg = Image.new("RGBA", resized.size, (0, 0, 0, 255))
+            frame_final = Image.alpha_composite(bg, resized)
+            frames.append(ImageTk.PhotoImage(frame_final))
 
-        image_label = tk.Label(root, bg=BG_COLOR)
-        image_label.pack(pady=(10, 5))
+        image_label = tk.Label(main_frame, bg="#000000", borderwidth=0)
+        image_label.pack(pady=(15, 0))
 
         def animate(idx=0):
             frame = frames[idx]
@@ -59,26 +89,25 @@ def run_app():
         animate()
     except Exception as e:
         print(f"GIF error: {e}")
-        image_label = tk.Label(
-            root, text="[GIF ERROR]", bg=BG_COLOR, fg=TEXT_COLOR, font=("Segoe UI", 12)
+        image_label = ctk.CTkLabel(
+            main_frame, text="[GIF ERROR]", font=("Segoe UI", 12), text_color="#FFFFFF"
         )
-        image_label.pack(pady=(10, 5))
+        image_label.pack(pady=(10, 0))
 
-    status_label = tk.Label(
-        root,
+    status_label = ctk.CTkLabel(
+        main_frame,
         text="Arjun is inactive.",
-        fg=ACCENT_COLOR,
-        bg=BG_COLOR,
-        font=("Segoe UI", 11, "italic"),
-        wraplength=260,
+        text_color="#A0DDEE",
+        font=("Segoe UI", 12, "italic"),
+        wraplength=230,
         justify="center",
     )
-    status_label.pack(pady=(5, 10), padx=10)
+    status_label.pack(pady=(10, 5), padx=10)
 
     def set_status(msg: str):
         nonlocal base_status_height
 
-        status_label.config(text=msg)
+        status_label.configure(text=msg)
         root.update_idletasks()
 
         needed = status_label.winfo_reqheight()
@@ -87,38 +116,27 @@ def run_app():
             base_status_height = needed
 
         extra = max(0, needed - base_status_height)
-
-        extra = min(extra, 220)
+        extra = min(extra, 200)
 
         new_height = WINDOW_BASE_HEIGHT + extra
         root.geometry(f"{WINDOW_WIDTH}x{new_height}")
 
     set_status("Arjun is inactive.")
 
-    mode_label = tk.Label(
-        root,
+    mode_label = ctk.CTkLabel(
+        main_frame,
         text="Mode: Friendly",
-        fg=TEXT_COLOR,
-        bg=BG_COLOR,
-        font=("Segoe UI", 10, "italic"),
+        font=("Segoe UI", 11, "italic"),
+        text_color="#FFFFFF"
     )
     mode_label.pack(pady=(0, 10))
 
-    def on_button_enter(event, button, color):
-        button.config(bg=color)
-
-    def on_button_leave(event, button, color):
-        button.config(bg=color)
-
-    button_frame = tk.Frame(root, bg=BG_COLOR)
-    button_frame.pack(fill="x", padx=15, pady=(0, 15))
-    for col in (0, 1, 2):
-        button_frame.columnconfigure(col, weight=1)
+    action_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+    action_frame.pack(fill="x", padx=20, pady=(0, 10))
 
     assistant = JarvisAssistant(gui_queue, update_gui_status)
 
     def start_thread():
-        start_button.config(state="disabled")
         t = threading.Thread(target=assistant.run, daemon=True)
         t.start()
 
@@ -126,62 +144,85 @@ def run_app():
         assistant.toggle_sleep()
         set_status("Toggling sleep state...")
 
-    start_button = tk.Button(
-        button_frame,
-        text="Start",
-        command=start_thread,
-        bg="#333333",
-        fg=TEXT_COLOR,
+    def hide_to_tray():
+        root.withdraw()
+        
+        try:
+            icon_image = Image.open(paths.assistant_gif).copy().resize((64, 64), Image.LANCZOS)
+        except Exception:
+            icon_image = Image.new('RGB', (64, 64), color=(0, 255, 0))
+            
+        def on_show_clicked(icon_obj, item):
+            icon_obj.stop()
+            root.after(0, root.deiconify)
+
+        def on_quit_clicked(icon_obj, item):
+            icon_obj.stop()
+            root.after(0, root.destroy)
+            
+        menu = pystray.Menu(
+            pystray.MenuItem('Show', on_show_clicked, default=True),
+            pystray.MenuItem('Quit', on_quit_clicked)
+        )
+        
+        icon = pystray.Icon("Arjun", icon_image, "Arjun AI", menu)
+        threading.Thread(target=icon.run, daemon=True).start()
+
+    action_frame.columnconfigure(0, weight=1)
+    action_frame.columnconfigure(1, weight=1)
+
+    def on_start_click():
+        start_btn.configure(state="disabled", text="Running...")
+        start_thread()
+
+    def on_end_click():
+        root.destroy()
+
+    def gui_toggle_sleep():
+        assistant.toggle_sleep()
+        set_status("Toggling sleep state...")
+
+    def on_option_select(choice):
+        if choice == "Sleep / Wake":
+            gui_toggle_sleep()
+        elif choice == "Hide (To Tray)":
+            hide_to_tray()
+        options_menu.set("More Options...")
+
+    start_btn = ctk.CTkButton(
+        action_frame,
+        text="Start AI",
+        command=on_start_click,
         font=("Segoe UI", 12, "bold"),
-        relief="flat",
-        borderwidth=0,
-        pady=5,
+        fg_color="#1f538d",
+        hover_color="#14375e",
+        height=30
     )
-    start_button.grid(row=0, column=0, sticky="ew", padx=4)
-    start_button.bind(
-        "<Enter>", lambda e: on_button_enter(e, start_button, "#444444")
-    )
-    start_button.bind(
-        "<Leave>", lambda e: on_button_leave(e, start_button, "#333333")
-    )
+    start_btn.grid(row=0, column=0, sticky="ew", padx=3, pady=(0, 5))
 
-    sleep_button = tk.Button(
-        button_frame,
-        text="Sleep",
-        command=gui_toggle_sleep,
-        bg="#555555",
-        fg=TEXT_COLOR,
-        font=("Segoe UI", 12),
-        relief="flat",
-        borderwidth=0,
-        pady=5,
-    )
-    sleep_button.grid(row=0, column=1, sticky="ew", padx=4)
-    sleep_button.bind(
-        "<Enter>", lambda e: on_button_enter(e, sleep_button, "#666666")
-    )
-    sleep_button.bind(
-        "<Leave>", lambda e: on_button_leave(e, sleep_button, "#555555")
-    )
-
-    quit_button = tk.Button(
-        button_frame,
+    end_btn = ctk.CTkButton(
+        action_frame,
         text="Quit",
-        command=root.destroy,
-        bg=QUIT_COLOR,
-        fg=TEXT_COLOR,
-        font=("Segoe UI", 12),
-        relief="flat",
-        borderwidth=0,
-        pady=5,
+        command=on_end_click,
+        font=("Segoe UI", 12, "bold"),
+        fg_color="#8c1b1b",
+        hover_color="#a82222",
+        height=30
     )
-    quit_button.grid(row=0, column=2, sticky="ew", padx=4)
-    quit_button.bind(
-        "<Enter>", lambda e: on_button_enter(e, quit_button, QUIT_HOVER)
+    end_btn.grid(row=0, column=1, sticky="ew", padx=3, pady=(0, 5))
+
+    options_menu = ctk.CTkOptionMenu(
+        action_frame,
+        values=["Sleep / Wake", "Hide (To Tray)"],
+        command=on_option_select,
+        font=("Segoe UI", 12, "bold"),
+        fg_color="#454545",
+        button_color="#333333",
+        button_hover_color="#555555",
+        height=30
     )
-    quit_button.bind(
-        "<Leave>", lambda e: on_button_leave(e, quit_button, QUIT_COLOR)
-    )
+    options_menu.set("More Options...")
+    options_menu.grid(row=1, column=0, columnspan=2, sticky="ew", padx=3)
 
     def gui_good_feedback():
         if assistant.save_last_interaction("good"):
@@ -195,47 +236,41 @@ def run_app():
         else:
             set_status("No recent response to rate.")
 
-    feedback_frame = tk.Frame(root, bg=BG_COLOR)
+    feedback_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
     feedback_frame.pack(fill="x", padx=15, pady=(0, 15))
     feedback_frame.columnconfigure(0, weight=1)
     feedback_frame.columnconfigure(1, weight=1)
 
-    good_btn = tk.Button(
+    good_btn = ctk.CTkButton(
         feedback_frame,
         text="👍 Good",
         command=gui_good_feedback,
-        bg="#2E7D32",
-        fg=TEXT_COLOR,
-        font=("Segoe UI", 11),
-        relief="flat",
-        borderwidth=0,
-        pady=5,
+        font=("Segoe UI", 12),
+        fg_color="#2E7D32",
+        hover_color="#388E3C",
+        height=30
     )
-    good_btn.grid(row=0, column=0, sticky="ew", padx=4)
-    good_btn.bind("<Enter>", lambda e: on_button_enter(e, good_btn, "#388E3C"))
-    good_btn.bind("<Leave>", lambda e: on_button_leave(e, good_btn, "#2E7D32"))
+    good_btn.grid(row=0, column=0, sticky="ew", padx=3)
 
-    bad_btn = tk.Button(
+    bad_btn = ctk.CTkButton(
         feedback_frame,
         text="👎 Bad",
         command=gui_bad_feedback,
-        bg="#C62828",
-        fg=TEXT_COLOR,
-        font=("Segoe UI", 11),
-        relief="flat",
-        borderwidth=0,
-        pady=5,
+        font=("Segoe UI", 12),
+        fg_color="#8c1b1b",
+        hover_color="#a82222",
+        height=30
     )
-    bad_btn.grid(row=0, column=1, sticky="ew", padx=4)
-    bad_btn.bind("<Enter>", lambda e: on_button_enter(e, bad_btn, "#D32F2F"))
-    bad_btn.bind("<Leave>", lambda e: on_button_leave(e, bad_btn, "#C62828"))
+    bad_btn.grid(row=0, column=1, sticky="ew", padx=3)
 
     def move_window(event):
         root.geometry(
             f"+{event.x_root - root.winfo_width() // 2}+{event.y_root - 20}"
         )
 
+    # Bind dragging to the main frame and GIF so user can move it anywhere
     image_label.bind("<B1-Motion>", move_window)
+    main_frame.bind("<B1-Motion>", move_window)
 
     def process_gui_queue():
         nonlocal current_wake_name
@@ -245,22 +280,21 @@ def run_app():
 
             if msg == "QUIT":
                 root.destroy()
+                return
 
             elif msg == "STATE:SLEEPING":
                 text = f"Sleeping... (Say 'Hey {current_wake_name}' to wake)"
                 set_status(text)
-                sleep_button.config(text="Wake Up", bg="#006400")
 
             elif msg == "STATE:AWAKE":
                 text = "Arjun is online and ready."
                 set_status(text)
-                sleep_button.config(text="Sleep", bg="#555555")
 
             elif msg.startswith("MODE:"):
                 if "FRIENDLY" in msg:
-                    mode_label.config(text="Mode: Friendly")
+                    mode_label.configure(text="Mode: Friendly")
                 elif "JARVIS" in msg:
-                    mode_label.config(text="Mode: Jarvis-style")
+                    mode_label.configure(text="Mode: Jarvis-style")
 
             elif msg.startswith("WAKEWORD:"):
                 new_name = msg.split(":", 1)[1].strip() or "Arjun"
