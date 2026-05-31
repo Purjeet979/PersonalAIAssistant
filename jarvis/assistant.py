@@ -37,8 +37,8 @@ GMAIL_ATTACH_TRIGGERS = ("email attachments", "attachments in gmail", "koi attac
 SYSTEM_STATUS_TRIGGERS = ("system status", "system stats", "cpu usage", "ram usage")
 VOL_UP_TRIGGERS = ("increase volume", "increase the volume", "volume up")
 VOL_DOWN_TRIGGERS = ("decrease volume", "decrease the volume", "volume down", "lower volume")
-BRIGHT_UP_TRIGGERS = ("increase brightness", "brightness up")
-BRIGHT_DOWN_TRIGGERS = ("decrease brightness", "brightness down", "lower brightness")
+BRIGHT_UP_TRIGGERS = ("increase brightness", "brightness up", "brightness increase", "brightness badhao")
+BRIGHT_DOWN_TRIGGERS = ("decrease brightness", "brightness down", "lower brightness", "brightness decrease", "brightness kam karo")
 JOKE_TRIGGERS = ("tell me a joke", "say a joke", "make me laugh")
 SHUTDOWN_TRIGGERS = ("shutdown", "turn off", "power off")
 RESTART_TRIGGERS = ("restart", "reboot")
@@ -78,6 +78,15 @@ class JarvisAssistant:
         self.display_name = "Arjun"
         self.last_query = ""
         self.last_reply = ""
+        self.current_query = ""
+
+        # Global intercept to always save the last spoken text and its query for feedback
+        original_say = self.audio.say
+        def intercepted_say(text: str):
+            self.last_query = getattr(self, "current_query", "")
+            self.last_reply = text
+            original_say(text)
+        self.audio.say = intercepted_say
 
     def _contains_any(self, text, phrases):
         return any(p in text for p in phrases)
@@ -86,6 +95,8 @@ class JarvisAssistant:
         self.audio.say(jarvis_text if self.state.current_persona == "jarvis" and jarvis_text else friendly_text)
 
     def _try_handle_query(self, query: str, lower_q: str):
+        self.current_query = query
+
         if self._contains_any(lower_q, SLEEP_TRIGGERS):
             self._say_by_persona("Going to sleep.", "Entering sleep mode.")
             self.audio.set_sleep(True)
@@ -278,12 +289,34 @@ class JarvisAssistant:
             self_evaluate_and_improve(self.state, self.audio.say)
             return "handled"
 
-        def custom_say(text: str):
-            self.last_query = query
-            self.last_reply = text
-            self.audio.say(text)
+        # --- Layer 2: LLM Intent Routing ---
+        from .ai_engine import detect_intent, _get_active_model
+        active_model = _get_active_model()
+        self.update_gui_status("Routing intent...")
+        intent = detect_intent(query, active_model)
+        
+        if intent == "BRIGHTNESS_UP":
+            brightness_up(self.audio)
+            return "handled"
+        elif intent == "BRIGHTNESS_DOWN":
+            brightness_down(self.audio)
+            return "handled"
+        elif intent == "VOL_UP":
+            volume_up(self.audio)
+            return "handled"
+        elif intent == "VOL_DOWN":
+            volume_down(self.audio)
+            return "handled"
+        elif intent == "SHUTDOWN":
+            shutdown_pc(self.audio)
+            return "handled"
+        elif intent == "YOUTUBE_PLAY":
+            from .features import play_youtube_video
+            play_youtube_video(query, self.audio)
+            return "handled"
 
-        ai_chat(query, self.state, custom_say, self.update_gui_status)
+        # --- Layer 3: General Chat ---
+        ai_chat(query, self.state, self.audio.say, self.update_gui_status)
         return "handled"
 
     def set_persona(self, mode: str):
