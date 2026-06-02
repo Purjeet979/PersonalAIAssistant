@@ -49,14 +49,14 @@ def _get_active_model() -> str:
     try:
         models = ollama.list().get("models", [])
         model_names = [m.get("model") or m.get("name") for m in models]
-        for candidate in ["gemma:2b", "arjun-custom:latest", "arjun-custom", "llama3:8b"]:
+        for candidate in ["arjun-custom:latest", "arjun-custom", "jarvis-custom:latest", "jarvis-custom", "llama3:8b"]:
             if candidate in model_names or (candidate + ":latest") in model_names:
                 return candidate
         if model_names:
             return model_names[0]
     except Exception:
         pass
-    return "gemma:2b"
+    return "llama3:8b"
 
 def _trim_history(history):
     if len(history) <= MAX_HISTORY_LIMIT:
