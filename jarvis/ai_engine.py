@@ -20,9 +20,9 @@ except Exception:
 MAX_HISTORY_LIMIT = 20
 KNOWLEDGE_TRIGGERS = ("who is", "what is", "tell me about", "why is", "how does")
 STIFF_PREFIXES = ("Dear sir", "Greetings", "Hello sir")
-PERSONA_MODELS = {"friendly": "gemma:2b", "jarvis": "gemma:2b"}
-FRIENDLY_CHAT_OPTIONS = {"temperature": 0.55, "top_p": 0.92, "num_predict": 260}
-JARVIS_CHAT_OPTIONS = {"temperature": 0.2, "top_p": 0.85, "num_predict": 180}
+PERSONA_MODELS = {"friendly": "arjun-custom", "jarvis": "jarvis-custom"}
+FRIENDLY_CHAT_OPTIONS = {"temperature": 0.6, "top_p": 0.95, "num_predict": 120}
+JARVIS_CHAT_OPTIONS = {"temperature": 0.2, "top_p": 0.85, "num_predict": 150}
 EMOTIONAL_CUES = ("sad", "stress", "stressed", "low", "anxious", "anxiety", "upset", "tired", "lonely", "hurt", "depressed", "bad day")
 ONE_WORD_ALLOW = ("one word", "single word", "just one word", "yes or no", "only yes or no")
 SHORT_REPLY_MAX_WORDS = 4
@@ -92,12 +92,13 @@ def apply_persona_style(reply: str, state: MemoryState) -> str:
     if not reply:
         return reply
 
-    # Chain-of-Thought (CoT): Extract and strip thoughts
-    thought_match = re.search(r"<thought>(.*?)</thought>", reply, re.DOTALL | re.IGNORECASE)
+    # Chain-of-Thought (CoT): Extract and strip thoughts (robust to unclosed tags)
+    thought_match = re.search(r"<thought>(.*?)(?:</thought>|$)", reply, re.DOTALL | re.IGNORECASE)
     if thought_match:
         thought_content = thought_match.group(1).strip()
-        print(f"\n[Reasoning Process]: {thought_content}\n")
-        reply = re.sub(r"<thought>.*?</thought>", "", reply, flags=re.DOTALL | re.IGNORECASE).strip()
+        if thought_content:
+            print(f"\n[Reasoning Process]: {thought_content}\n")
+        reply = re.sub(r"<thought>.*?(?:</thought>|$)", "", reply, flags=re.DOTALL | re.IGNORECASE).strip()
 
     # Robust cleanup of alternative/raw step-by-step reasoning formats (e.g. Step 1: ..., Final Response: ...)
     for pattern in [
@@ -134,7 +135,7 @@ def apply_persona_style(reply: str, state: MemoryState) -> str:
             reply = "Done."
         if reply[-1] not in ".!?":
             reply += "."
-        if not reply.lower().startswith("sir"):
+        if not reply.lower().startswith("sir") and "sir" not in reply.lower():
             reply = "Sir, " + reply[0].lower() + reply[1:]
         return reply
 
@@ -146,30 +147,8 @@ def apply_persona_style(reply: str, state: MemoryState) -> str:
     return reply
 
 def _enrich_friendly_reply(query_lower: str, reply: str) -> str:
-    words = len(reply.split())
-    is_recipe_query = any(c in query_lower for c in RECIPE_CUES)
-    generic_reply = reply.lower().strip()
-    looks_generic = any(g in generic_reply for g in GENERIC_REPLY_CUES)
-
-
-    if words > 10:
-        return reply
-    if any(k in query_lower for k in ONE_WORD_ALLOW):
-        return reply
-    if not any(c in query_lower for c in EMOTIONAL_CUES):
-        if words > SHORT_REPLY_MAX_WORDS:
-            return reply
-        tail = "Tu chahe to main thoda detail me samjha du ya next step bata du?"
-        if any(x in query_lower for x in ("what", "why", "how", "kaise", "kya", "kyu", "explain")):
-            tail = "Agar bole to main isko simple aur clear way me step-by-step explain kar deta hu."
-        elif any(x in query_lower for x in ("plan", "career", "job", "study", "exam", "project", "help")):
-            tail = "Chal isko easy banate hain, main abhi 2-3 practical steps de deta hu."
-        if reply and reply[-1] not in ".!?":
-            reply += "."
-        return f"{reply} {tail}"
-    if reply and reply[-1] not in ".!?":
-        reply += "."
-    return f"{reply} Koi na, main tere sath hu, I will support you. Tu chahe to bata kya hua, ya main abhi ek chhota next step suggest kar du?"
+    # Let the custom-tuned model handle the friendly response style naturally
+    return reply
 
 def detect_intent(query: str, model_name: str) -> str:
     prompt = f"""You are an intent classification engine. Analyze the user's query and map it to exactly one of the following intents:
