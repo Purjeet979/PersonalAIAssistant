@@ -47,7 +47,9 @@ A reinforcement learning feedback loop that logs ratings:
 * Extracts video search queries using Hinglish/English verb filters.
 * Automatically selects and clicks the first video result in a background thread to prevent GUI freezing.
 
-### 🛡️ 7. Resilience & Model Fallbacks
+### 🛡️ 7. Resilience, Optimization & Model Fallbacks
+* **Auto-Start Ollama:** Silently auto-starts the Ollama server in the background on app launch if it isn't already running.
+* **VRAM Optimization:** Optimized memory and VRAM usage by capping the context window limit (`num_ctx`) in the AI Modelfiles.
 * **Model Fallbacks:** Checks local Ollama library models and falls back to active installed models dynamically if the preferred models (`gemma:2b` or `llama3:8b`) are missing.
 * **Thread-Safety Lock:** Uses `threading.Lock` inside the audio manager to prevent audio collisions from concurrent events (e.g. alarms/timers firing while speaking).
 
