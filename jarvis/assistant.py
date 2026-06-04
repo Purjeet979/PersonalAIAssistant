@@ -18,6 +18,7 @@ from .features import (
     media_playpause, media_next, media_prev,
     brightness_up, brightness_down,
     tell_joke, shutdown_pc, restart_pc,
+    speak_with_llm,
 )
 from .gmail_tools import (
     gmail_summary_text,
@@ -26,22 +27,22 @@ from .gmail_tools import (
     gmail_attachments_text,
 )
 
-SLEEP_TRIGGERS = ("go to sleep", "stop arjun", "stop listening")
-NOTE_ADD_TRIGGERS = ("take a note", "write this down", "make a note")
-NOTE_READ_TRIGGERS = ("read my notes", "show my notes", "what are my notes")
-FILE_SEARCH_TRIGGERS = ("find file", "search for file", "search file")
-GMAIL_SUMMARY_TRIGGERS = ("gmail summary", "summary of my gmail", "gmail ka summary", "inbox summary")
-GMAIL_SEARCH_TRIGGERS = ("search gmail for", "gmail search for", "gmail me search", "gmail me dekh")
-GMAIL_IMPORTANT_TRIGGERS = ("important emails", "starred emails", "gmail important", "gmail starred")
-GMAIL_ATTACH_TRIGGERS = ("email attachments", "attachments in gmail", "koi attachment aya", "any new attachments")
-SYSTEM_STATUS_TRIGGERS = ("system status", "system stats", "cpu usage", "ram usage")
-VOL_UP_TRIGGERS = ("increase volume", "increase the volume", "volume up")
-VOL_DOWN_TRIGGERS = ("decrease volume", "decrease the volume", "volume down", "lower volume")
-BRIGHT_UP_TRIGGERS = ("increase brightness", "brightness up", "brightness increase", "brightness badhao")
-BRIGHT_DOWN_TRIGGERS = ("decrease brightness", "brightness down", "lower brightness", "brightness decrease", "brightness kam karo")
-JOKE_TRIGGERS = ("tell me a joke", "say a joke", "make me laugh")
-SHUTDOWN_TRIGGERS = ("shutdown", "turn off", "power off")
-RESTART_TRIGGERS = ("restart", "reboot")
+SLEEP_TRIGGERS = ("go to sleep", "stop arjun", "stop listening", "so ja", "so jao", "chup ho ja", "band ho ja", "rest kar")
+NOTE_ADD_TRIGGERS = ("take a note", "write this down", "make a note", "likh le", "note banao", "note likho", "isko likho")
+NOTE_READ_TRIGGERS = ("read my notes", "show my notes", "what are my notes", "notes dikhao", "notes padho", "kya likha hai")
+FILE_SEARCH_TRIGGERS = ("find file", "search for file", "search file", "file dhundho", "file search karo", "file kahan hai")
+GMAIL_SUMMARY_TRIGGERS = ("gmail summary", "summary of my gmail", "gmail ka summary", "inbox summary", "gmail batao", "emails batao", "mail padh")
+GMAIL_SEARCH_TRIGGERS = ("search gmail for", "gmail search for", "gmail me search", "gmail me dekh", "mail me dhund")
+GMAIL_IMPORTANT_TRIGGERS = ("important emails", "starred emails", "gmail important", "gmail starred", "zaroori email", "khaas mail")
+GMAIL_ATTACH_TRIGGERS = ("email attachments", "attachments in gmail", "koi attachment aya", "any new attachments", "file aayi hai")
+SYSTEM_STATUS_TRIGGERS = ("system status", "system stats", "cpu usage", "ram usage", "pc kaisa chal raha hai", "system check", "laptop ka status")
+VOL_UP_TRIGGERS = ("increase volume", "increase the volume", "volume up", "awaz bada", "awaz badha", "volume bada", "tez kar")
+VOL_DOWN_TRIGGERS = ("decrease volume", "decrease the volume", "volume down", "lower volume", "awaz kam", "volume kam", "dheere kar")
+BRIGHT_UP_TRIGGERS = ("increase brightness", "brightness up", "brightness increase", "brightness badhao", "light bada", "roshni bada")
+BRIGHT_DOWN_TRIGGERS = ("decrease brightness", "brightness down", "lower brightness", "brightness decrease", "brightness kam karo", "light kam", "roshni kam")
+JOKE_TRIGGERS = ("tell me a joke", "say a joke", "make me laugh", "chutkula sunao", "joke sunao", "hasa de")
+SHUTDOWN_TRIGGERS = ("shutdown", "turn off", "power off", "pc band kar", "laptop band kar", "system off", "shut down")
+RESTART_TRIGGERS = ("restart", "reboot", "pc restart", "laptop restart kar", "system restart")
 SELF_IMPROVE_TRIGGERS = ("optimize yourself", "improve yourself", "update yourself", "upgrade yourself")
 YOUTUBE_SEARCH_TRIGGERS = (
     "search on youtube",
@@ -61,6 +62,9 @@ YOUTUBE_PLAY_TRIGGERS = (
     "youtube par play",
     "youtube me play",
     "play on youtube for",
+    "gana chla de",
+    "youtube pe gana",
+    "play song on youtube",
 )
 GOOD_FEEDBACK_TRIGGERS = ("good job", "nice response", "nice answer", "great job", "sahi jawab", "correct answer")
 BAD_FEEDBACK_TRIGGERS = ("bad response", "bad answer", "wrong answer", "incorrect response", "that was bad", "galat jawab")
@@ -145,29 +149,29 @@ class JarvisAssistant:
 
         if self._contains_any(lower_q, YOUTUBE_SEARCH_TRIGGERS):
             from .features import search_youtube
-            search_youtube(query, self.audio)
+            threading.Thread(target=search_youtube, args=(query, self.audio), daemon=True).start()
             return "handled"
 
         if self._contains_any(lower_q, YOUTUBE_PLAY_TRIGGERS):
             from .features import play_youtube_video
-            play_youtube_video(query, self.audio)
+            threading.Thread(target=play_youtube_video, args=(query, self.audio), daemon=True).start()
             return "handled"
 
         if self._contains_any(lower_q, GMAIL_SUMMARY_TRIGGERS):
             self.update_gui_status("Fetching Gmail summary...")
-            self.audio.say(gmail_summary_text())
+            threading.Thread(target=lambda: speak_with_llm(gmail_summary_text(), "Here is a summary of unread emails", self.audio, self.state, self.update_gui_status), daemon=True).start()
             return "handled"
         if self._contains_any(lower_q, GMAIL_SEARCH_TRIGGERS):
             self.update_gui_status("Searching your Gmail...")
-            self.audio.say(gmail_search_text(query))
+            threading.Thread(target=lambda: speak_with_llm(gmail_search_text(query), "Here are the email search results", self.audio, self.state, self.update_gui_status), daemon=True).start()
             return "handled"
         if self._contains_any(lower_q, GMAIL_IMPORTANT_TRIGGERS):
             self.update_gui_status("Checking important emails...")
-            self.audio.say(gmail_important_text())
+            threading.Thread(target=lambda: speak_with_llm(gmail_important_text(), "Here are the important emails", self.audio, self.state, self.update_gui_status), daemon=True).start()
             return "handled"
         if self._contains_any(lower_q, GMAIL_ATTACH_TRIGGERS):
             self.update_gui_status("Checking recent email attachments...")
-            self.audio.say(gmail_attachments_text(days=7))
+            threading.Thread(target=lambda: speak_with_llm(gmail_attachments_text(days=7), "Here are recent emails with attachments", self.audio, self.state, self.update_gui_status), daemon=True).start()
             return "handled"
 
         if handle_whatsapp_command(query, self.audio, self.update_gui_status):
@@ -200,18 +204,19 @@ class JarvisAssistant:
             self._say_by_persona(f"The time is {now}", f"Time: {now}.")
             return "handled"
 
-        if simple_weather(lower_q, self.audio, self.state, self.update_gui_status):
+        if check_command(lower_q, ["weather", "temperature", "mausam"], []):
+            threading.Thread(target=simple_weather, args=(lower_q, self.audio, self.state, self.update_gui_status), daemon=True).start()
             return "handled"
 
         if "wake me up at" in lower_q or "set an alarm for" in lower_q:
-            set_alarm(query, self.audio)
+            threading.Thread(target=set_alarm, args=(query, self.audio), daemon=True).start()
             return "handled"
         if "set a timer for" in lower_q:
-            set_timer(query, self.audio)
+            threading.Thread(target=set_timer, args=(query, self.audio), daemon=True).start()
             return "handled"
 
         if "latest news" in lower_q or "news headlines" in lower_q:
-            speak_latest_news(self.audio, self.state, self.update_gui_status)
+            threading.Thread(target=speak_latest_news, args=(self.audio, self.state, self.update_gui_status), daemon=True).start()
             return "handled"
 
         if self._contains_any(lower_q, SYSTEM_STATUS_TRIGGERS):
