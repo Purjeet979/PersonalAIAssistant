@@ -10,8 +10,8 @@ Built with **Python**, **Ollama (Local LLM)**, and **Tkinter**, this project fea
 
 ### 🧠 1. Dual-Persona "Two-Brain" System
 We engineered a dynamic switching engine that changes the underlying AI model and voice settings based on context:
-* **Arjun Mode (Friendly):** Uses a baseline `gemma:2b` model configured with a friendly, supportive Hinglish system prompt. Speaks naturally, uses Roman Hinglish, and acts as a close friend.
-* **Jarvis Mode (Professional):** Uses `gemma:2b` configured with an Iron Man-style formal assistant prompt, starting replies with "Sir" and maintaining compose.
+* **Arjun Mode (Friendly):** Uses a customized `llama3:8b` model (`arjun-custom`) configured with a friendly, supportive Hinglish system prompt. Speaks naturally, uses Roman Hinglish, and acts as a close friend.
+* **Jarvis Mode (Professional):** Uses `llama3:8b` (`jarvis-custom`) configured with an Iron Man-style formal assistant prompt, starting replies with "Sir" and maintaining compose.
 * **Dynamic Switching:** Switch instantly via voice (*"Switch to Jarvis"*) or by clicking the GUI mode button.
 
 ### 🗣️ 2. Natural Neural Speech (Microsoft Edge TTS)
@@ -31,7 +31,7 @@ To eliminate latency from remote speech generation:
 ### 📂 4. Persistent Semantic Memory (ChromaDB Vector Store)
 Replaced the simple text-file memory with a production-grade database:
 * Uses a persistent **ChromaDB** client to store long-term user memories.
-* Embeddings are generated dynamically using the local Ollama instance.
+* **Zero-VRAM Embeddings:** Embeddings are generated instantly on the CPU using ChromaDB's native ONNX `all-MiniLM-L6-v2` model, offloading the burden from the local Ollama instance.
 * Employs MD5 document hashing to ensure duplicate memories are rejected in $O(1)$ time.
 * Semantic search uses cosine similarity with a matching threshold to prevent irrelevant context injection.
 
@@ -45,17 +45,20 @@ A reinforcement learning feedback loop that logs ratings:
 ### 🌐 6. Playwright Browser Automation (YouTube Autoplay)
 * Automates video playback by launching a headful Chromium browser using **Playwright**.
 * Extracts video search queries using Hinglish/English verb filters.
-* Automatically selects and clicks the first video result in a background thread to prevent GUI freezing.
+* Automatically selects and clicks the first video result.
+
+### ⚡ 7. Async Background Tasking
+* Heavy API calls (YouTube, Gmail, Weather, News) are wrapped in `threading.Thread` to execute concurrently, ensuring the assistant loop and voice recognition never freeze or lag while fetching data.
 
 ### 🛡️ 7. Resilience, Optimization & Model Fallbacks
 * **Auto-Start Ollama:** Silently auto-starts the Ollama server in the background on app launch if it isn't already running.
 * **VRAM Optimization:** Optimized memory and VRAM usage by capping the context window limit (`num_ctx`) in the AI Modelfiles.
-* **Model Fallbacks:** Checks local Ollama library models and falls back to active installed models dynamically if the preferred models (`gemma:2b` or `llama3:8b`) are missing.
+* **Model Fallbacks:** Checks local Ollama library models and falls back to active installed models dynamically if the preferred models (`llama3:8b`) are missing.
 * **Thread-Safety Lock:** Uses `threading.Lock` inside the audio manager to prevent audio collisions from concurrent events (e.g. alarms/timers firing while speaking).
 
-### 🤖 8. Hybrid LLM Intent Router (Ollama JSON Mode)
-* **Zero-Shot Classification:** Instead of relying purely on hardcoded if/else triggers, the system utilizes Ollama's Native JSON output mode to map complex, unscripted user queries to specific hardware/software actions.
-* **Layered Architecture:** Maintains sub-millisecond response times for common commands while falling back to the intelligent LLM router for nuanced requests (like *"aankhein dukh rahi hai, light kam kar"*).
+### 🤖 9. Hybrid Fast-Match Intent Router
+* **Zero-Latency Commands:** Implemented a high-speed Regex/Keyword intent matcher that triggers system controls (Volume, Brightness, Play/Pause) in milliseconds, completely bypassing the heavy LLM.
+* **Layered Architecture:** Falls back to the intelligent conversational LLM only for nuanced requests or natural conversations, drastically reducing overall latency.
 
 ### 🎨 9. Modern CustomTkinter UI & Aesthetics
 * **Dynamic Layouts:** Designed with `CustomTkinter` offering a transparent, borderless window with smooth curved edges and interactive dropdown toggle menus (`CTkOptionMenu`).
