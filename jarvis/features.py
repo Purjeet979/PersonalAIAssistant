@@ -229,22 +229,7 @@ def get_backup_news():
     return None, "I had trouble connecting to the news service."
 
 def get_latest_news():
-    try:
-        newsapi = NewsApiClient(api_key=config.NEWS_API_KEY)
-
-        headlines = newsapi.get_top_headlines(
-            country="in",
-            language="en",
-            page_size=5
-        )
-
-        if headlines.get("status") == "ok" and headlines.get("totalResults", 0) > 0:
-            titles = [f"- {article['title']}" for article in headlines.get("articles", [])]
-            return titles, None
-    except Exception as e:
-        print(f"NewsAPI error: {e}")
-
-    print("NewsAPI failed or is unavailable. Trying backup Google News RSS...")
+    # NewsAPI has been failing, so we default to Google News RSS directly
     return get_backup_news()
 
 def speak_latest_news(audio_mgr, state, update_gui_status):
@@ -363,37 +348,21 @@ def restart_pc(audio_mgr):
         say("Restart cancelled.")
 
 def extract_youtube_search_query(query: str) -> str:
-    lower_query = query.lower()
+    clean_query = query.lower()
     
-    # Remove trigger patterns with word boundaries to avoid partial word matching
-    patterns = [
-        r"\bsearch\s+on\s+youtube\s+for\b",
-        r"\bsearch\s+youtube\s+for\b",
-        r"\bsearch\s+on\s+youtube\b",
-        r"\bsearch\s+youtube\b",
-        r"\byoutube\s+search\b",
-        r"\byoutube\s+par\s+search\s+karo\b",
-        r"\byoutube\s+me\s+search\s+karo\b",
-        r"\byoutube\s+pe\s+search\s+karo\b",
-        r"\byoutube\s+par\s+search\b",
-        r"\byoutube\s+me\s+search\b",
-        r"\byoutube\s+pe\s+search\b",
-        r"\byoutube\s+pe\s+dekh\b",
-        r"\byoutube\s+par\s+dekh\b",
-        r"\byoutube\s+par\b",
-        r"\byoutube\s+pe\b",
-        r"\bon\s+youtube\b",
-        r"\bin\s+youtube\b",
+    # Robust removal of platform words, action verbs, and filler particles
+    patterns_to_remove = [
+        r'\byoutube\s*(par|pe|me|on|in)?\b',
+        r'\b(play|chala|chla|chalao|laga|lagao|baja|bajao|start)\b',
+        r'\b(video|song|gana|music|karo|please|dekh|dikhao|search|for|about|on|the)\b',
+        r'\b(ka|ke|ki|ek|koi)\b', 
     ]
     
-    clean_query = lower_query
-    for pattern in patterns:
-        clean_query = re.sub(pattern, "", clean_query, flags=re.IGNORECASE).strip()
+    for pattern in patterns_to_remove:
+        clean_query = re.sub(pattern, " ", clean_query, flags=re.IGNORECASE)
         
-    # Clean trailing or leading helper words
-    clean_query = re.sub(r"^(karo|please|for|about|dekh|show|play|search)\b", "", clean_query).strip()
-    clean_query = re.sub(r"\b(karo|please|dekh|dikhao|search)$", "", clean_query).strip()
-    
+    # Clean up extra spaces
+    clean_query = re.sub(r'\s+', ' ', clean_query).strip()
     return clean_query
 
 def search_youtube(query: str, audio_mgr):
@@ -436,9 +405,16 @@ def play_youtube_video(query: str, audio_mgr):
                 encoded = urllib.parse.quote(search_term)
                 page.goto(f"https://www.youtube.com/results?search_query={encoded}")
                 
-                page.wait_for_selector('ytd-video-renderer a#video-title', timeout=10000)
-                first_video = page.locator('ytd-video-renderer a#video-title').first
-                first_video.click()
+                # Use a broader set of selectors in case YouTube changes its DOM or serves a mobile/alternate layout
+                selector = 'ytd-video-renderer a#video-title, a#video-title-link, a.yt-simple-endpoint.style-scope.ytd-video-renderer'
+                page.wait_for_selector(selector, timeout=10000)
+                first_video = page.locator(selector).first
+                href = first_video.get_attribute("href")
+                
+                if href and href.startswith("/watch"):
+                    page.goto(f"https://www.youtube.com{href}")
+                else:
+                    first_video.click(force=True)
                 
                 while True:
                     if not browser.is_connected():
@@ -452,3 +428,13 @@ def play_youtube_video(query: str, audio_mgr):
             webbrowser.open(f"https://www.youtube.com/results?search_query={encoded}")
             
     threading.Thread(target=_bg_play, daemon=True).start()
+
+def speak_with_llm(raw_text: str, prefix: str, audio_mgr, state, update_gui_status):
+    say = audio_mgr.say
+    if "trouble" in raw_text or "couldn't" in raw_text or "no new" in raw_text or "don't seem" in raw_text or "no emails" in raw_text:
+        say(raw_text)
+        return
+        
+    prompt = f"You are an AI assistant. {prefix}: '{raw_text}'. Read this out naturally and concisely."
+    ai_generate(prompt, state, say, update_gui_status, speak_result=True)
+
