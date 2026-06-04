@@ -54,3 +54,7 @@ test_sonia_speech.mp3
 TOP_1_PERCENT_IDEAS.md
 # Allow requirements
 !requirements.txt
+
+# Ignored Folders
+data/
+docs/
