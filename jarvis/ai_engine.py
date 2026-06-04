@@ -45,10 +45,18 @@ JARVIS_FLUFF_PHRASES = (
     "feel free to ask",
 )
 
-def _get_active_model() -> str:
+def _get_active_model(state=None) -> str:
+    target = "llama3:8b"
+    if state and hasattr(state, "current_persona"):
+        target = PERSONA_MODELS.get(state.current_persona, target)
+        
     try:
         models = ollama.list().get("models", [])
         model_names = [m.get("model") or m.get("name") for m in models]
+        
+        if target in model_names or (target + ":latest") in model_names:
+            return target
+            
         for candidate in ["arjun-custom:latest", "arjun-custom", "jarvis-custom:latest", "jarvis-custom", "llama3:8b"]:
             if candidate in model_names or (candidate + ":latest") in model_names:
                 return candidate
@@ -56,7 +64,7 @@ def _get_active_model() -> str:
             return model_names[0]
     except Exception:
         pass
-    return "llama3:8b"
+    return target
 
 def _trim_history(history):
     if len(history) <= MAX_HISTORY_LIMIT:
@@ -151,35 +159,38 @@ def _enrich_friendly_reply(query_lower: str, reply: str) -> str:
     return reply
 
 def detect_intent(query: str, model_name: str) -> str:
-    prompt = f"""You are an intent classification engine. Analyze the user's query and map it to exactly one of the following intents:
-- BRIGHTNESS_UP (e.g., increase brightness, screen is dark)
-- BRIGHTNESS_DOWN (e.g., decrease brightness, eyes hurting, screen too bright)
-- VOL_UP (e.g., volume up, make it louder, awaz badhao)
-- VOL_DOWN (e.g., volume down, too loud, awaz kam kar)
-- YOUTUBE_PLAY (e.g., play song on youtube, gana laga)
-- SHUTDOWN (e.g., turn off pc, shutdown)
-- UNKNOWN (if none of the above match, or if it's general conversation)
-
-Query: '{query}'
-
-Respond ONLY with a JSON object in this exact format:
-{{"intent": "INTENT_NAME"}}
-"""
-    try:
-        resp = ollama.generate(model=model_name, prompt=prompt, format="json")
-        raw = resp.get("response", "").strip()
+    ql = query.lower()
+    
+    # BRIGHTNESS UP
+    if re.search(r'(increase|badao|bada|badha|jyada|tez|tej|up).*(brightness|light|roshni)', ql) or \
+       re.search(r'(brightness|light|roshni).*(increase|badao|bada|badha|jyada|tez|tej|up)', ql):
+        return "BRIGHTNESS_UP"
         
-        # Robust JSON extraction
-        start = raw.find("{")
-        end = raw.rfind("}")
-        if start != -1 and end != -1 and end >= start:
-            clean_json = raw[start:end+1]
-            data = json.loads(clean_json)
-            return data.get("intent", "UNKNOWN")
-        return "UNKNOWN"
-    except Exception as e:
-        print(f"Intent Routing error: {e}")
-        return "UNKNOWN"
+    # BRIGHTNESS DOWN
+    if re.search(r'(decrease|kam|ghata|low|dim|down).*(brightness|light|roshni)', ql) or \
+       re.search(r'(brightness|light|roshni).*(decrease|kam|ghata|low|dim|down)', ql):
+        return "BRIGHTNESS_DOWN"
+
+    # VOL UP
+    if re.search(r'(increase|badao|bada|badha|jyada|tez|tej|up|louder).*(volume|awaz|sound)', ql) or \
+       re.search(r'(volume|awaz|sound).*(increase|badao|bada|badha|jyada|tez|tej|up|louder)', ql):
+        return "VOL_UP"
+        
+    # VOL DOWN
+    if re.search(r'(decrease|kam|ghata|low|quiet|down).*(volume|awaz|sound)', ql) or \
+       re.search(r'(volume|awaz|sound).*(decrease|kam|ghata|low|quiet|down)', ql):
+        return "VOL_DOWN"
+
+    # YOUTUBE PLAY
+    if re.search(r'(play|chal|chla|laga|baja).*(youtube|song|gana|music|video)', ql) or \
+       re.search(r'(youtube|song|gana|music|video).*(play|chal|chla|laga|baja)', ql):
+        return "YOUTUBE_PLAY"
+        
+    # SHUTDOWN
+    if re.search(r'(shut down|shutdown|turn off|band kar|band kr|power off)', ql):
+        return "SHUTDOWN"
+    
+    return "UNKNOWN"
 
 def chat(query: str, state: MemoryState, say, update_gui_status):
     update_gui_status("Thinking...")
@@ -219,7 +230,7 @@ def chat(query: str, state: MemoryState, say, update_gui_status):
         models = ollama.list().get("models", [])
         model_names = [m.get("model") or m.get("name") for m in models]
         if model_name not in model_names and (model_name + ":latest") not in model_names:
-            model_name = _get_active_model()
+            model_name = _get_active_model(state)
     except Exception:
         pass
 
@@ -244,9 +255,17 @@ def chat(query: str, state: MemoryState, say, update_gui_status):
 
 def ai_generate(prompt: str, state: MemoryState, say, update_gui_status, speak_result=False):
     update_gui_status("Generating...")
-    full_prompt = f"{state.system_prompt}\n\nUser's request: {prompt}"
+    
+    # Use a simplified persona prompt for background tasks to prevent over-empathy 
+    # (e.g. consoling the user about tragic news instead of summarizing it)
+    if state and hasattr(state, "current_persona") and state.current_persona == "jarvis":
+        bg_sys_prompt = "You are Jarvis, a highly efficient, professional AI assistant."
+    else:
+        bg_sys_prompt = "You are Arjun, a friendly AI assistant speaking in Hinglish."
+        
+    full_prompt = f"{bg_sys_prompt}\n\nTask: {prompt}\nImportant: Do not offer condolences or conversational filler. Just fulfill the task directly."
 
-    model_name = _get_active_model()
+    model_name = _get_active_model(state)
     try:
         resp = ollama.generate(model=model_name, prompt=full_prompt)
         text = resp["response"]
