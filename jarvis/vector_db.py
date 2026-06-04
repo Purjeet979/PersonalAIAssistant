@@ -96,14 +96,7 @@ class VectorDB:
             pass
         return "llama3:8b"
 
-    def get_embedding(self, text: str) -> list[float]:
-        model = self._get_active_model()
-        try:
-            resp = ollama.embeddings(model=model, prompt=text)
-            return resp.get("embedding", [])
-        except Exception as e:
-            print(f"Ollama embedding error using model '{model}': {e}")
-            return []
+    # Embeddings are now automatically handled by ChromaDB's default ONNX model (all-MiniLM-L6-v2)
 
     @property
     def documents(self) -> list[dict]:
@@ -139,15 +132,9 @@ class VectorDB:
         except Exception as e:
             print(f"Error checking duplicate in ChromaDB: {e}")
 
-        embedding = self.get_embedding(text)
-        if not embedding:
-            print(f"Could not generate embedding for text: {text}")
-            return
-
         try:
             self.collection.add(
                 ids=[doc_id],
-                embeddings=[embedding],
                 documents=[text],
                 metadatas=[metadata or {}]
             )
@@ -188,24 +175,16 @@ class VectorDB:
         if not new_ids:
             return
 
-        # Generate embeddings only for new documents
+        # Let ChromaDB handle embeddings automatically
         new_docs = []
-        new_embeddings = []
         for d_id in new_ids:
-            text = docs_map[d_id]["text"]
-            embedding = self.get_embedding(text)
-            if embedding:
-                new_docs.append(docs_map[d_id])
-                new_embeddings.append(embedding)
-            else:
-                print(f"Could not generate embedding for text: {text}")
+            new_docs.append(docs_map[d_id])
 
         # Ingest new documents in a single batch insert
         if new_docs:
             try:
                 self.collection.add(
                     ids=[self._generate_id(d["text"]) for d in new_docs],
-                    embeddings=new_embeddings,
                     documents=[d["text"] for d in new_docs],
                     metadatas=[d["metadata"] for d in new_docs]
                 )
@@ -219,14 +198,10 @@ class VectorDB:
         if not query_text:
             return []
 
-        query_emb = self.get_embedding(query_text)
-        if not query_emb:
-            return []
-
         try:
             # We omit 'embeddings' from include to avoid transferring heavy float arrays
             res = self.collection.query(
-                query_embeddings=[query_emb],
+                query_texts=[query_text],
                 n_results=top_n,
                 include=["documents", "metadatas", "distances"]
             )
