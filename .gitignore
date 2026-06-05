@@ -60,4 +60,4 @@ data/
 docs/
 
 # Ignore test files
-test.py
+test_commands.py
