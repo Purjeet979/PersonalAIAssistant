@@ -58,3 +58,6 @@ TOP_1_PERCENT_IDEAS.md
 # Ignored Folders
 data/
 docs/
+
+# Ignore test files
+test.py
