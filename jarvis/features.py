@@ -133,22 +133,25 @@ def set_alarm(query, audio_mgr):
 
 def set_timer(query, audio_mgr):
     say = audio_mgr.say
-    match = re.search(r"(\d+)\s+(second|minute|hour)s?", query)
+    match = re.search(r"(\d+)\s+(sec|second|min|minute|hour)s?", query, re.IGNORECASE)
     if not match:
         say("Sorry, I didn't understand the duration. Please say 'set a timer for 5 minutes' or '10 seconds'.")
         return
 
     value = int(match.group(1))
-    unit = match.group(2)
-    duration_str = f"{value} {unit}"
-
-    if unit == "second":
+    unit = match.group(2).lower()
+    
+    if unit.startswith("sec"):
         seconds = value
-    elif unit == "minute":
+        unit_str = "seconds"
+    elif unit.startswith("min"):
         seconds = value * 60
+        unit_str = "minutes"
     else:
         seconds = value * 3600
+        unit_str = "hours"
 
+    duration_str = f"{value} {unit_str}"
     threading.Timer(seconds, _timer_end, args=[duration_str, audio_mgr]).start()
     say(f"Okay, timer set for {duration_str}.")
 
@@ -156,32 +159,35 @@ def simple_weather(query, audio_mgr, state, update_gui_status):
     say = audio_mgr.say
     lower_q = query.lower()
     
-    if "weather" not in lower_q and "temperature" not in lower_q and "temp" not in lower_q:
+    if not any(w in lower_q for w in ["weather", "temperature", "temp", "mausam", "vedar", "wether"]):
         return False
         
     city = None
     
-    # List of search patterns
+    # List of search patterns (most specific to least specific)
     patterns = [
-        r"(?:weather|temperature|temp)\s+(?:today\s+)?(?:in|of|at|for)\s+([a-z\s]+)",
-        r"(?:weather|temperature|temp)\s+([a-z]+)",
-        r"([a-z]+)\s+(?:weather|temperature|temp)"
+        r"(?:weather|temperature|temp|mausam|vedar|wether)\s+(?:today\s+)?(?:in|of|at|for|ka|ki|me|mein)\s+([a-z\s]+)",
+        r"([a-z\s]+?)\s+(?:ka|ki|me|mein)?\s*(?:weather|temperature|temp|mausam|vedar|wether)",
+        r"(?:weather|temperature|temp|mausam|vedar|wether)\s+([a-z]+)"
     ]
+    
+    excluded_words = ("today", "tomorrow", "now", "current", "report", "forecast", "like", "in", "of", "kya", "hai", "bata", "batao", "dikha", "dikhao", "please")
     
     for pattern in patterns:
         match = re.search(pattern, lower_q)
         if match:
             candidate = match.group(1).strip()
-            # Exclude common non-city words
-            if candidate not in ("today", "tomorrow", "now", "current", "report", "forecast", "like", "in", "of"):
+            # If the entire candidate is an excluded word, skip it
+            if candidate not in excluded_words:
                 city = candidate
                 break
                 
     if not city:
         city = "Delhi"
         
-    # Clean up city name
-    city = re.sub(r"\b(today|tomorrow|now|current|report|forecast|like|please)\b", "", city).strip()
+    # Clean up city name from common extra words
+    cleanup_pattern = r"\b(" + "|".join(excluded_words) + r")\b"
+    city = re.sub(cleanup_pattern, "", city).strip()
     
     if not city:
         city = "Delhi"
@@ -241,7 +247,8 @@ def speak_latest_news(audio_mgr, state, update_gui_status):
     joined = "Here are the top headlines:\n" + "\n".join(titles)
     prompt = (
         "You are an AI assistant. Here are the top news headlines: "
-        f"'{joined}'. Please read the top 3 headlines to the user in a natural and engaging way."
+        f"'{joined}'. Please read the top 3 headlines to the user in a natural and engaging way. "
+        "Do NOT add conversational greetings or use words like 'Sir' or 'Bhai'. Just state the news."
     )
     ai_generate(prompt, state, say, update_gui_status, speak_result=True)
 
@@ -395,33 +402,22 @@ def play_youtube_video(query: str, audio_mgr):
     import threading
     def _bg_play():
         try:
-            from playwright.sync_api import sync_playwright
-            with sync_playwright() as p:
-                browser = p.chromium.launch(headless=False, args=["--start-maximized"])
-                context = browser.new_context(no_viewport=True)
-                page = context.new_page()
-                
-                import urllib.parse
-                encoded = urllib.parse.quote(search_term)
-                page.goto(f"https://www.youtube.com/results?search_query={encoded}")
-                
-                # Use a broader set of selectors in case YouTube changes its DOM or serves a mobile/alternate layout
-                selector = 'ytd-video-renderer a#video-title, a#video-title-link, a.yt-simple-endpoint.style-scope.ytd-video-renderer'
-                page.wait_for_selector(selector, timeout=10000)
-                first_video = page.locator(selector).first
-                href = first_video.get_attribute("href")
-                
-                if href and href.startswith("/watch"):
-                    page.goto(f"https://www.youtube.com{href}")
-                else:
-                    first_video.click(force=True)
-                
-                while True:
-                    if not browser.is_connected():
-                        break
-                    page.wait_for_timeout(1000)
+            import urllib.request
+            import urllib.parse
+            import re
+            import webbrowser
+            
+            encoded = urllib.parse.quote(search_term)
+            html = urllib.request.urlopen(f"https://www.youtube.com/results?search_query={encoded}")
+            video_ids = re.findall(r"watch\?v=(\S{11})", html.read().decode())
+            
+            if video_ids:
+                url = "https://www.youtube.com/watch?v=" + video_ids[0]
+                webbrowser.open(url)
+            else:
+                webbrowser.open(f"https://www.youtube.com/results?search_query={encoded}")
         except Exception as e:
-            print(f"Playwright error: {e}")
+            print(f"YouTube play error: {e}")
             import webbrowser
             import urllib.parse
             encoded = urllib.parse.quote(search_term)
@@ -435,6 +431,10 @@ def speak_with_llm(raw_text: str, prefix: str, audio_mgr, state, update_gui_stat
         say(raw_text)
         return
         
-    prompt = f"You are an AI assistant. {prefix}: '{raw_text}'. Read this out naturally and concisely."
+    prompt = (
+        f"You are an AI assistant. {prefix}: '{raw_text}'. Read this out naturally and concisely. "
+        "Do NOT add any conversational greetings, intros like 'Kya haal hai', 'Bhai', or 'Sir'. "
+        "Do NOT repeat the information. Just directly deliver the content once."
+    )
     ai_generate(prompt, state, say, update_gui_status, speak_result=True)
 
