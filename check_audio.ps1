@@ -1,0 +1,1 @@
+Get-WinEvent -FilterHashtable @{LogName='System'} -MaxEvents 5000 | Where-Object { $_.ProviderName -match 'Audio' -or $_.Message -match 'audio' -or $_.Message -match 'sound' -or $_.ProviderName -match 'Bluetooth' } | Select-Object TimeCreated, ProviderName, Id, Message | ConvertTo-Json -Depth 2
