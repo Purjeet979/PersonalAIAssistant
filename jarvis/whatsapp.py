@@ -38,14 +38,14 @@ def parse_send_message_command(text: str):
         message = re.sub(r"^(karo|ki|karke|poochho)\s+", "", message).strip()
         return contact_name, message
 
-    # Pattern 3: English - send (a) message to [Name] saying/that [Message]
-    english_pattern1 = r"(?:send\s+(?:a\s+)?)?message\s+to\s+(.+?)\s+(?:saying|that|ki)\s+(.+)"
+    # Pattern 3: English - send (a) message to [Name] (saying/that/ki) [Message]
+    english_pattern1 = r"(?:send\s+(?:a\s+)?)?message\s+to\s+([a-zA-Z0-9_]+)\s*(?:saying|that|ki)?\s+(.+)"
     m = re.match(english_pattern1, text)
     if m:
         return m.group(1).strip(), m.group(2).strip()
 
-    # Pattern 4: English - send [Name] a message saying/that [Message]
-    english_pattern2 = r"send\s+(.+?)\s+(?:a\s+)?message\s+(?:saying|that|ki)\s+(.+)"
+    # Pattern 4: English - send [Name] a message (saying/that/ki) [Message]
+    english_pattern2 = r"send\s+([a-zA-Z0-9_]+)\s+(?:a\s+)?message\s*(?:saying|that|ki)?\s+(.+)"
     m = re.match(english_pattern2, text)
     if m:
         return m.group(1).strip(), m.group(2).strip()
@@ -55,9 +55,12 @@ def parse_send_message_command(text: str):
     m = re.match(english_pattern3, text)
     if m:
         contact_name = m.group(1).strip()
-        # Filter out common names that might be a false positive
         if contact_name in CONTACTS:
             return contact_name, m.group(2).strip()
+        else:
+            m2 = re.match(r"message\s+([a-zA-Z0-9_]+)\s*(?:saying|that|ki)?\s+(.+)", text)
+            if m2:
+                return m2.group(1).strip(), m2.group(2).strip()
 
     return None, None
 
