@@ -19,8 +19,13 @@ def _get_gmail_service():
         creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
+            try:
+                creds.refresh(Request())
+            except Exception:
+                if os.path.exists(TOKEN_PATH):
+                    os.remove(TOKEN_PATH)
+                creds = None
+        if not creds or not creds.valid:
             if not os.path.exists(CREDS_PATH):
                 raise RuntimeError(
                     f"credentials.json not found at {CREDS_PATH}. "
