@@ -157,7 +157,7 @@ class JarvisAssistant:
             threading.Thread(target=play_youtube_video, args=(query, self.audio), daemon=True).start()
             return "handled"
 
-        if self._contains_any(lower_q, GMAIL_SUMMARY_TRIGGERS):
+        if self._contains_any(lower_q, GMAIL_SUMMARY_TRIGGERS) or (("gmail" in lower_q or "email" in lower_q) and ("summary" in lower_q or "summarize" in lower_q or "summarise" in lower_q)):
             self.update_gui_status("Fetching Gmail summary...")
             threading.Thread(target=lambda: speak_with_llm(gmail_summary_text(), "Here is a summary of unread emails", self.audio, self.state, self.update_gui_status), daemon=True).start()
             return "handled"
@@ -165,7 +165,7 @@ class JarvisAssistant:
             self.update_gui_status("Searching your Gmail...")
             threading.Thread(target=lambda: speak_with_llm(gmail_search_text(query), "Here are the email search results", self.audio, self.state, self.update_gui_status), daemon=True).start()
             return "handled"
-        if self._contains_any(lower_q, GMAIL_IMPORTANT_TRIGGERS):
+        if self._contains_any(lower_q, GMAIL_IMPORTANT_TRIGGERS) or (("gmail" in lower_q or "email" in lower_q) and "important" in lower_q):
             self.update_gui_status("Checking important emails...")
             threading.Thread(target=lambda: speak_with_llm(gmail_important_text(), "Here are the important emails", self.audio, self.state, self.update_gui_status), daemon=True).start()
             return "handled"
@@ -199,20 +199,23 @@ class JarvisAssistant:
                 self.audio.say("I don't know your name yet. You can tell me by saying 'Arjun remember my name is...'")
             return "handled"
 
-        if check_command(lower_q, ["what is", "tell me"], ["the time"]):
-            now = datetime.datetime.now().strftime('%H:%M:%S')
+        if "time" in lower_q and any(w in lower_q for w in ["what", "tell", "kya", "bata"]):
+            now = datetime.datetime.now().strftime('%I:%M %p')
             self._say_by_persona(f"The time is {now}", f"Time: {now}.")
             return "handled"
 
-        if check_command(lower_q, ["weather", "temperature", "mausam"], []):
+        if self._contains_any(lower_q, ["weather", "temperature", "mausam", "vedar", "wether", "temp"]):
             threading.Thread(target=simple_weather, args=(lower_q, self.audio, self.state, self.update_gui_status), daemon=True).start()
             return "handled"
 
-        if "wake me up at" in lower_q or "set an alarm for" in lower_q:
-            threading.Thread(target=set_alarm, args=(query, self.audio), daemon=True).start()
-            return "handled"
-        if "set a timer for" in lower_q:
+        import re
+        timer_match = re.search(r"(\d+)\s+(sec|min|hour|second|minute)", lower_q)
+        if "timer" in lower_q or ("alarm" in lower_q and timer_match):
             threading.Thread(target=set_timer, args=(query, self.audio), daemon=True).start()
+            return "handled"
+
+        if "alarm" in lower_q or "wake me up" in lower_q:
+            threading.Thread(target=set_alarm, args=(query, self.audio), daemon=True).start()
             return "handled"
 
         if "latest news" in lower_q or "news headlines" in lower_q:
@@ -229,7 +232,7 @@ class JarvisAssistant:
             volume_down(self.audio)
             return "handled"
 
-        if "pause" in lower_q or "play" in lower_q:
+        if "pause" in lower_q or "resume" in lower_q or "play/pause" in lower_q:
             media_playpause(self.audio)
             return "handled"
         if "next song" in lower_q or "next track" in lower_q:
