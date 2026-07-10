@@ -8,8 +8,6 @@ import requests
 import psutil
 import pyautogui
 import screen_brightness_control as sbc
-from newsapi import NewsApiClient
-import config
 from .paths import paths
 from .ai_engine import ai_generate
 
