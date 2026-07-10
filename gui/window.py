@@ -178,10 +178,6 @@ def run_app():
     def on_end_click():
         root.destroy()
 
-    def gui_toggle_sleep():
-        assistant.toggle_sleep()
-        set_status("Toggling sleep state...")
-
     def on_option_select(choice):
         if choice == "Sleep / Wake":
             gui_toggle_sleep()
