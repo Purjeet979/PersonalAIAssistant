@@ -28,23 +28,6 @@ except Exception:
 
     DEFAULT_LOG_PATH = "logs/episodes.jsonl"
 
-CANDIDATE_USER_KEYS = [
-    "query",
-    "user",
-    "user_input",
-    "prompt",
-    "question",
-]
-
-CANDIDATE_ASSIST_KEYS = [
-    "assistant_reply",
-    "reply",
-    "response",
-    "assistant",
-    "final_reply",
-    "answer",
-]
-
 def pick_first_str(d: dict, keys) -> str | None:
     for k in keys:
         v = d.get(k)
