@@ -1,63 +1,44 @@
-# Ignore huge model files (Too big for GitHub)
-model/*.gguf
+# Large Model Files
+model/
 *.gguf
 *.bin
 
-# Ignore Virtual Environment
+# Virtual Environments & Packages
 venv/
 .venv/
-__pycache__/
+node_modules/
 
-# Ignore Logs and History (Keep user data private)
+# Python & IDE Cache
+__pycache__/
+.pytest_cache/
+.vscode/
+*.pyc
+
+# Local Data, Logs, and Databases
+.chroma/
+.chroma_test/
+data/
+docs/
 logs/
-memory/
 training/
-arjun.log
 *.jsonl
 *.txt
+*.pickle
+arjun.log
 
-# Ignore Credentials (NEVER upload these)
+# Credentials & Environment Variables
 .env
-credentials.json
-
-model/
-*.gguf
-venv/
-.venv/
-logs/
-training/
-__pycache__/
-
-model/
-*.gguf
-venv/
-.venv/
-logs/
-training/
-__pycache__/
-*.jsonl
-
-
+.env.*
 token.json
 credentials.json
 client_secret.json
-*.pickle
 
-# Ignore local databases and temp files
-.chroma/
-.chroma_test/
-temp_speech.mp3
-temp_speech_*.mp3
-temp_sonia_speech.mp3
-test_speech_*.mp3
-test_sonia_speech.mp3
+# Audio & Speech Temp Files
+*.mp3
+
+# Specific/Temporary Files
 TOP_1_PERCENT_IDEAS.md
-# Allow requirements
-!requirements.txt
-
-# Ignored Folders
-data/
-docs/
-
-# Ignore test files
 test_commands.py
+
+# Allow requirements.txt
+!requirements.txt
