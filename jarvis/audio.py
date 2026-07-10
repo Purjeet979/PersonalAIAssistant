@@ -34,25 +34,6 @@ def split_into_sentences(text: str) -> list[str]:
     sentences = re.split(r'(?<=[.!?|])\s+', text)
     return [s.strip() for s in sentences if s.strip()]
 
-def speak_edge_tts(text: str, voice: str, path: str) -> bool:
-    try:
-        if os.path.exists(path):
-            try:
-                os.remove(path)
-            except Exception:
-                pass
-        asyncio.run(_generate_speech(text, voice, path))
-        if os.path.exists(path) and os.path.getsize(path) > 0:
-            play_audio_mci(path)
-            try:
-                os.remove(path)
-            except Exception:
-                pass
-            return True
-    except Exception as e:
-        print(f"Edge TTS generate/play error: {e}")
-    return False
-
 class AudioManager:
     def __init__(self, update_gui_status):
         self.update_gui_status = update_gui_status
